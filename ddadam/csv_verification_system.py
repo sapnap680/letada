@@ -79,6 +79,27 @@ class JBAVerificationSystem:
         
         return normalized
     
+    def get_search_variations(self, university_name):
+        """大学名の検索バリエーションを生成"""
+        if not university_name:
+            return []
+        
+        variations = [university_name.strip()]
+        
+        # 長い大学名の場合、短縮バリエーションも追加
+        if len(university_name) > 6:  # 長い名前の場合
+            # 語尾を段階的に削除
+            suffixes_to_remove = ['体育会バスケットボール部', 'バスケットボール部', '体育会', '部']
+            
+            for suffix in suffixes_to_remove:
+                if university_name.endswith(suffix):
+                    base_name = university_name[:-len(suffix)].strip()
+                    if base_name and len(base_name) > 2:  # 最低3文字以上
+                        variations.append(base_name)
+        
+        # 重複を削除
+        return list(set(variations))
+    
     def login(self, email, password):
         """JBAサイトにログイン"""
         try:
@@ -127,6 +148,9 @@ class JBAVerificationSystem:
             normalized_university = self.normalize_university_name(university_name)
             st.info(f"🔍 正規化された大学名: {normalized_university}")
             
+            # 正規化された大学名で検索
+            search_university = normalized_university
+            
             # 検索ページにアクセスしてCSRFトークンを取得
             search_url = "https://team-jba.jp/organization/15250600/team/search"
             search_page = self.session.get(search_url)
@@ -143,14 +167,14 @@ class JBAVerificationSystem:
             if csrf_input:
                 csrf_token = csrf_input.get('value', '')
             
-            # JSON APIを使用した検索
+            # JSON APIを使用した検索（男子チームのみ）
             search_data = {
                 "limit": 100,
                 "offset": 0,
                 "searchLogic": "AND",
                 "search": [
                     {"field": "fiscal_year", "type": "text", "operator": "is", "value": current_year},
-                    {"field": "team_name", "type": "text", "operator": "contains", "value": university_name},
+                    {"field": "team_name", "type": "text", "operator": "contains", "value": search_university},
                     {"field": "competition_division_id", "type": "int", "operator": "is", "value": 1},
                     {"field": "team_search_out_of_range", "type": "int", "operator": "is", "value": 1}
                 ]
@@ -452,22 +476,25 @@ class JBAVerificationSystem:
             # デバッグ情報を表示
             st.write(f"🔍 選手照合: {player_name}, 大学: {university}")
             
-            # 大学のチームを検索（柔軟な照合）
-            st.write(f"🔍 チーム検索開始: {university}")
-            teams = self.search_teams_by_university(university)
-            st.write(f"🔍 検索結果: {len(teams)}チーム見つかりました")
-
-            if not teams:
-                # 正規化された大学名で再検索
-                normalized_university = self.normalize_university_name(university)
-                if normalized_university != university:
-                    st.info(f"🔄 正規化された大学名で再検索: {normalized_university}")
-                    teams = self.search_teams_by_university(normalized_university)
-                    st.write(f"🔍 再検索結果: {len(teams)}チーム見つかりました")
+            # 大学名の検索バリエーションを生成
+            search_variations = self.get_search_variations(university)
+            st.write(f"🔍 検索バリエーション: {search_variations}")
+            
+            teams = []
+            for variation in search_variations:
+                st.write(f"🔍 チーム検索開始: {variation}")
+                teams = self.search_teams_by_university(variation)
+                st.write(f"🔍 検索結果: {len(teams)}チーム見つかりました")
                 
-                if not teams:
-                    st.warning(f"❌ {university}の男子チームが見つかりませんでした")
-                    return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
+                if teams:
+                    st.success(f"✅ {variation}でチームが見つかりました")
+                    break
+                else:
+                    st.info(f"❌ {variation}ではチームが見つかりませんでした")
+            
+            if not teams:
+                st.warning(f"❌ {university}の男子チームが見つかりませんでした")
+                return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
             # 各チームのメンバー情報を取得して照合
             for team in teams:
