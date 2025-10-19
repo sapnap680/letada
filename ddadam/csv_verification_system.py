@@ -54,6 +54,31 @@ class JBAVerificationSystem:
         else:
             return str(current_year - 1)
     
+    def normalize_university_name(self, university_name):
+        """大学名を正規化（柔軟な照合のため）"""
+        if not university_name:
+            return ""
+        
+        # 基本的な正規化
+        normalized = university_name.strip()
+        
+        # よくある表記の統一
+        replacements = {
+            '白鷗大学': '白鴎大学',
+            '白鴎大学': '白鴎大学',
+            '白鷗': '白鴎',
+            '白鴎': '白鴎',
+            '大学': '大学',
+            '学院': '学院',
+            '短期大学': '短期大学',
+            '短大': '短期大学'
+        }
+        
+        for old, new in replacements.items():
+            normalized = normalized.replace(old, new)
+        
+        return normalized
+    
     def login(self, email, password):
         """JBAサイトにログイン"""
         try:
@@ -89,7 +114,7 @@ class JBAVerificationSystem:
             return False
     
     def search_teams_by_university(self, university_name):
-        """大学名でチームを検索"""
+        """大学名でチームを検索（柔軟な照合）"""
         try:
             if not self.logged_in:
                 st.error("❌ ログインが必要です")
@@ -97,6 +122,10 @@ class JBAVerificationSystem:
             
             current_year = self.get_current_fiscal_year()
             st.info(f"🔍 {university_name}の男子チームを検索中... ({current_year}年度)")
+            
+            # 大学名の正規化（柔軟な照合のため）
+            normalized_university = self.normalize_university_name(university_name)
+            st.info(f"🔍 正規化された大学名: {normalized_university}")
             
             # 検索ページにアクセスしてCSRFトークンを取得
             search_url = "https://team-jba.jp/organization/15250600/team/search"
@@ -420,11 +449,18 @@ class JBAVerificationSystem:
     def verify_player_info(self, player_name, birth_date, university, get_details=False):
         """個別選手情報の照合（男子チームのみ）"""
         try:
-            # 大学のチームを検索
+            # 大学のチームを検索（柔軟な照合）
             teams = self.search_teams_by_university(university)
 
             if not teams:
-                return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
+                # 正規化された大学名で再検索
+                normalized_university = self.normalize_university_name(university)
+                if normalized_university != university:
+                    st.info(f"🔄 正規化された大学名で再検索: {normalized_university}")
+                    teams = self.search_teams_by_university(normalized_university)
+                
+                if not teams:
+                    return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
             # 入力された生年月日を正規化
             normalized_input_date = self.normalize_date_format(birth_date)
@@ -900,9 +936,11 @@ def main():
             st.warning("⚠️ JBAにログインしてください")
         
         st.header("⚙️ 設定")
-        threshold = st.slider("類似度閾値", 0.1, 1.0, 0.8, 0.05)
+        threshold = 1.0  # 完全一致のみ
+        st.info("🔒 類似度閾値: 1.0 (完全一致のみ)")
         university_name = st.text_input("大学名", placeholder="例: 白鴎大学")
-        get_details = st.checkbox("詳細情報を取得（身長・体重・ポジション等）", value=False, help="チェックすると、選手詳細ページから身長・体重・ポジション・出身校・学年情報も取得します。処理時間が長くなります。")
+        get_details = True  # 常にオン
+        st.info("✅ 詳細情報取得: 有効（身長・体重・ポジション等を自動取得）")
         
         st.subheader("🤖 AI検証設定")
         gemini_api_key = st.text_input("Gemini APIキー", type="password", value="AIzaSyBCX-rsrYsGbPCHrlWXdd2ECAxmbTqTJ34", help="Google Gemini APIを使用した高度なAI検証を有効にします。")
