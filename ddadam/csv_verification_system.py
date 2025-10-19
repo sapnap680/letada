@@ -1010,120 +1010,83 @@ class FastCSVCorrectionSystem:
                     'correction': None
                 }
             
-            # 事前取得したチームデータから検索
-            if not university_teams_data:
-                return {
-                    'index': index,
-                    'original_data': row.to_dict(),
-                    'status': 'not_found',
-                    'message': f'{university_name}のチームデータが見つかりません',
-                    'correction': None
-                }
-            
-            # 大学内の全メンバーから候補を探す
-            all_matched_members = []
-            
-            for team_id, team_info in university_teams_data.items():
-                members = team_info.get('members', [])
-                
-                for member in members:
-                    # 名前の類似度を計算
-                    name_similarity = self.jba_system.calculate_similarity(player_name, member['name'])
-                    
-                    # 0.6以上の候補を保存
-                    if name_similarity >= 0.6:
-                        # 詳細情報を取得（必要に応じて）
-                        if get_details and member.get('detail_url'):
-                            if member['detail_url'] not in self.player_details_cache:
-                                player_details = self.jba_system.get_player_details(member['detail_url'])
-                                with self.lock:
-                                    self.player_details_cache[member['detail_url']] = player_details
-                            else:
-                                player_details = self.player_details_cache[member['detail_url']]
-                            
-                            member_with_details = member.copy()
-                            member_with_details.update(player_details)
-                        else:
-                            member_with_details = member
-                        
-                        all_matched_members.append({
-                            'similarity': name_similarity,
-                            'member': member_with_details,
-                            'team_name': team_info['team_name']
-                        })
-            
-            # マッチ結果を類似度でソート（降順）
-            all_matched_members.sort(key=lambda x: x['similarity'], reverse=True)
+            # 元のverify_player_infoメソッドを使用（動作確認済み）
+            verification_result = self.jba_system.verify_player_info(
+                player_name, None, university_name, get_details, threshold
+            )
             
             result = {
                 'index': index,
                 'original_data': row.to_dict(),
-                'status': 'not_found',
-                'message': 'マッチが見つかりませんでした',
-                'correction': None
+                'verification_result': verification_result,
+                'status': verification_result['status']
             }
             
-            if all_matched_members:
-                best_match = all_matched_members[0]
-                best_similarity = best_match['similarity']
-                best_member = best_match['member']
-                
-                # 1.0（完全一致）
-                if best_similarity >= 1.0:
-                    result['status'] = 'match'
+            # 完全一致の場合
+            if verification_result['status'] == 'match':
+                if get_details and 'jba_data' in verification_result:
+                    jba_data = verification_result['jba_data']
+                    is_valid, validation_issues, school_corrections = self.validator.validate_player_data(jba_data)
+                    
+                    corrected_data = row.to_dict().copy()
+                    
+                    # JBA情報を追加
+                    if 'height' in jba_data and jba_data['height']:
+                        corrected_data['身長'] = f"{jba_data['height']}cm"
+                    if 'weight' in jba_data and jba_data['weight']:
+                        corrected_data['体重'] = f"{jba_data['weight']}kg"
+                    if 'position' in jba_data and jba_data['position']:
+                        corrected_data['ポジション'] = jba_data['position']
+                    if 'school' in jba_data and jba_data['school']:
+                        if 'school' in school_corrections:
+                            corrected_data['出身校'] = school_corrections['school']
+                            result['school_correction'] = f"{jba_data['school']} → {school_corrections['school']}"
+                        else:
+                            corrected_data['出身校'] = jba_data['school']
+                    if 'grade' in jba_data and jba_data['grade']:
+                        corrected_data['学年'] = jba_data['grade']
+                    if 'uniform_number' in jba_data and jba_data['uniform_number']:
+                        corrected_data['背番号'] = jba_data['uniform_number']
+                    
+                    result['correction'] = corrected_data
+                    
+                    if not is_valid:
+                        result['validation_issues'] = validation_issues
+                        result['message'] = f'JBAデータベースと完全一致（詳細情報追加）⚠️ 異常値検出: {", ".join(validation_issues)}'
+                    else:
+                        result['message'] = 'JBAデータベースと完全一致（詳細情報追加）'
+                else:
+                    result['correction'] = None
                     result['message'] = 'JBAデータベースと完全一致'
-                    
-                    # 詳細情報を追加
-                    if get_details:
-                        is_valid, validation_issues, school_corrections = self.validator.validate_player_data(best_member)
-                        corrected_data = row.to_dict().copy()
-                        
-                        if 'height' in best_member and best_member['height']:
-                            corrected_data['身長'] = f"{best_member['height']}cm"
-                        if 'weight' in best_member and best_member['weight']:
-                            corrected_data['体重'] = f"{best_member['weight']}kg"
-                        if 'position' in best_member and best_member['position']:
-                            corrected_data['ポジション'] = best_member['position']
-                        if 'school' in best_member and best_member['school']:
-                            corrected_data['出身校'] = school_corrections.get('school', best_member['school'])
-                        if 'grade' in best_member and best_member['grade']:
-                            corrected_data['学年'] = best_member['grade']
-                        if 'uniform_number' in best_member and best_member['uniform_number']:
-                            corrected_data['背番号'] = best_member['uniform_number']
-                        
-                        result['correction'] = corrected_data
-                        
-                        if not is_valid:
-                            result['validation_issues'] = validation_issues
-                            result['message'] = f"JBAデータベースと完全一致（異常値検出: {', '.join(validation_issues)}）"
-                    
-                    result['jba_data'] = best_member
+            
+            # 部分一致の場合
+            elif verification_result['status'] == 'partial_match':
+                jba_data = verification_result['jba_data']
+                similarity = verification_result.get('similarity', 0.0)
                 
-                # 0.6-1.0（部分一致）
-                elif best_similarity >= 0.6:
-                    result['status'] = 'partial_match'
-                    result['message'] = f"部分一致: {best_member['name']} (類似度: {best_similarity:.3f}) - 手動確認推奨"
-                    
-                    if get_details:
-                        corrected_data = row.to_dict().copy()
-                        
-                        if 'height' in best_member and best_member['height']:
-                            corrected_data['身長'] = f"{best_member['height']}cm"
-                        if 'weight' in best_member and best_member['weight']:
-                            corrected_data['体重'] = f"{best_member['weight']}kg"
-                        if 'position' in best_member and best_member['position']:
-                            corrected_data['ポジション'] = best_member['position']
-                        if 'school' in best_member and best_member['school']:
-                            corrected_data['出身校'] = best_member['school']
-                        if 'grade' in best_member and best_member['grade']:
-                            corrected_data['学年'] = best_member['grade']
-                        if 'uniform_number' in best_member and best_member['uniform_number']:
-                            corrected_data['背番号'] = best_member['uniform_number']
-                        
-                        result['correction'] = corrected_data
-                    
-                    result['jba_data'] = best_member
-                    result['similarity'] = best_similarity
+                corrected_data = row.to_dict().copy()
+                
+                if get_details:
+                    if 'height' in jba_data and jba_data['height']:
+                        corrected_data['身長'] = f"{jba_data['height']}cm"
+                    if 'weight' in jba_data and jba_data['weight']:
+                        corrected_data['体重'] = f"{jba_data['weight']}kg"
+                    if 'position' in jba_data and jba_data['position']:
+                        corrected_data['ポジション'] = jba_data['position']
+                    if 'school' in jba_data and jba_data['school']:
+                        corrected_data['出身校'] = jba_data['school']
+                    if 'grade' in jba_data and jba_data['grade']:
+                        corrected_data['学年'] = jba_data['grade']
+                    if 'uniform_number' in jba_data and jba_data['uniform_number']:
+                        corrected_data['背番号'] = jba_data['uniform_number']
+                
+                result['correction'] = corrected_data
+                result['message'] = f"部分一致: {jba_data['name']} (類似度: {similarity:.3f}) - 手動確認推奨"
+            
+            # 一致なしの場合
+            else:
+                result['correction'] = None
+                result['message'] = verification_result.get('message', '照合できませんでした')
             
             return result
         

@@ -139,3 +139,5 @@ streamlit run csv_verification_system.py
 ### CSVファイルが読み込めない
 - 文字エンコーディングを確認（UTF-8推奨）
 - カラム名を確認（名前、生年月日が必須）
+
+
