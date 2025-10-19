@@ -935,16 +935,11 @@ def main():
         else:
             st.warning("⚠️ JBAにログインしてください")
         
-        st.header("⚙️ 設定")
+        # 内部設定（表示なし）
         threshold = 1.0  # 完全一致のみ
-        st.info("🔒 類似度閾値: 1.0 (完全一致のみ)")
-        university_name = st.text_input("大学名", placeholder="例: 白鴎大学")
         get_details = True  # 常にオン
-        st.info("✅ 詳細情報取得: 有効（身長・体重・ポジション等を自動取得）")
-        
-        st.subheader("🤖 AI検証設定")
-        gemini_api_key = st.text_input("Gemini APIキー", type="password", value="AIzaSyBCX-rsrYsGbPCHrlWXdd2ECAxmbTqTJ34", help="Google Gemini APIを使用した高度なAI検証を有効にします。")
-        use_ai_validation = st.checkbox("AI検証を使用", value=bool(gemini_api_key), help="Gemini APIを使用した高度なAI検証を有効にします。")
+        gemini_api_key = "AIzaSyBCX-rsrYsGbPCHrlWXdd2ECAxmbTqTJ34"  # 固定
+        use_ai_validation = True  # 常にオン
     
     # システム初期化
     if 'jba_system' not in st.session_state:
@@ -962,6 +957,9 @@ def main():
     
     # メインコンテンツ
     st.header("📄 CSVファイル処理")
+    
+    # 大学名入力
+    university_name = st.text_input("大学名", placeholder="例: 白鴎大学", help="JBAデータベースに登録されている大学名を入力してください")
     
     # CSVファイルアップロード
     uploaded_file = st.file_uploader(
