@@ -249,47 +249,62 @@ class JBAVerificationSystem:
                 return []
             
             soup = BeautifulSoup(search_page.content, 'html.parser')
-            csrf_token = soup.find('input', {'name': '_token'})
             
-            if not csrf_token:
-                return []
+            # CSRFトークンを取得
+            csrf_token = ""
+            csrf_input = soup.find('input', {'name': '_token'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value', '')
             
-            # 検索フォームのデータを準備
+            # JSON APIを使用した検索（男子チームのみ）
             search_data = {
-                '_token': csrf_token['value'],
-                'university': search_university,
-                'year': current_year,
-                'gender': 'male'  # 男子チームのみ
+                "limit": 100,
+                "offset": 0,
+                "searchLogic": "AND",
+                "search": [
+                    {"field": "fiscal_year", "type": "text", "operator": "is", "value": current_year},
+                    {"field": "team_name", "type": "text", "operator": "contains", "value": search_university},
+                    {"field": "competition_division_id", "type": "int", "operator": "is", "value": 1},
+                    {"field": "team_search_out_of_range", "type": "int", "operator": "is", "value": 1}
+                ]
             }
             
-            # 検索実行
-            search_result = self.session.post(search_url, data=search_data)
+            form_data = {'request': json.dumps(search_data, ensure_ascii=False)}
+            headers = {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'X-CSRF-Token': csrf_token,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
             
-            if search_result.status_code != 200:
+            # 検索リクエストを送信（JSON APIとして）
+            search_response = self.session.post(
+                search_url, 
+                data=form_data,
+                headers=headers
+            )
+            
+            if search_response.status_code != 200:
                 return []
             
-            # 検索結果を解析
-            result_soup = BeautifulSoup(search_result.content, 'html.parser')
-            team_links = result_soup.find_all('a', href=re.compile(r'/team/\d+'))
-            
-            teams = []
-            for link in team_links:
-                team_url = link['href']
-                if not team_url.startswith('http'):
-                    team_url = f"https://team-jba.jp{team_url}"
+            # JSONレスポンスを解析
+            try:
+                data = search_response.json()
+                teams = []
                 
-                team_name = link.get_text(strip=True)
-                team_id = re.search(r'/team/(\d+)', team_url)
-                team_id = team_id.group(1) if team_id else None
+                if data.get('status') == 'success' and 'records' in data:
+                    for team_data in data['records']:
+                        # 男子チームのみを対象
+                        if team_data.get('team_gender_id') == '男子':
+                            teams.append({
+                                'id': team_data.get('id', ''),
+                                'name': team_data.get('team_name', ''),
+                                'url': f"https://team-jba.jp/organization/15250600/team/{team_data.get('id', '')}/detail"
+                            })
                 
-                if team_id and team_name:
-                    teams.append({
-                        'id': team_id,
-                        'name': team_name,
-                        'url': team_url
-                    })
-            
-            return teams
+                return teams
+                
+            except Exception as e:
+                return []
             
         except Exception as e:
             return []
