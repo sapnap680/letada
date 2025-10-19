@@ -701,6 +701,7 @@ class CSVCorrectionSystem:
     def process_csv_file(self, df, university_name, threshold=0.8, get_details=False):
         """CSVファイルを処理して訂正版を作成"""
         st.info(f"📊 CSVファイルを処理中... ({len(df)}行)")
+        st.write(f"🔍 処理開始: 大学名={university_name}, 閾値={threshold}, 詳細取得={get_details}")
         
         # 結果を保存するためのリスト
         results = []
@@ -715,6 +716,9 @@ class CSVCorrectionSystem:
             progress = (index + 1) / len(df)
             progress_bar.progress(progress)
             status_text.text(f"処理中: {index + 1}/{len(df)} - {row.get('名前', row.get('氏名', 'Unknown'))}")
+            
+            # デバッグ情報を表示
+            st.write(f"🔍 行 {index + 1} を処理中...")
             
             # 選手名と生年月日を取得（カラム名は柔軟に対応）
             player_name = None
