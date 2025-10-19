@@ -473,10 +473,10 @@ class JBAVerificationSystem:
         
         return basic_similarity
 
-    def verify_player_info(self, player_name, birth_date, university, get_details=False):
+    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0):
         """個別選手情報の照合（男子チームのみ）"""
         try:
-            st.write(f"🔍 選手照合: {player_name}, 大学: {university}")
+            st.write(f"🔍 選手照合: {player_name}, 大学: {university}, 閾値: {threshold}")
             
             # 大学名の検索バリエーションを生成
             search_variations = self.get_search_variations(university)
@@ -801,7 +801,7 @@ class CSVCorrectionSystem:
             
             # JBAデータベースと照合（詳細情報も取得するかどうか）
             verification_result = self.jba_system.verify_player_info(
-                player_name, None, university_name, get_details
+                player_name, None, university_name, get_details, threshold
             )
             
             # 結果を保存
