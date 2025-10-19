@@ -1005,6 +1005,13 @@ def main():
                 elif st.session_state.csv_system is None:
                     st.error("❌ CSVシステムが初期化されていません。JBAにログインしてください。")
                 else:
+                    # デバッグ情報を表示
+                    st.info(f"🔍 デバッグ情報:")
+                    st.write(f"- 大学名: {university_name}")
+                    st.write(f"- データ行数: {len(df)}")
+                    st.write(f"- カラム名: {list(df.columns)}")
+                    st.write(f"- JBAログイン状態: {st.session_state.jba_logged_in}")
+                    
                     # CSV処理実行
                     results, corrections = st.session_state.csv_system.process_csv_file(
                         df, university_name, threshold, get_details
@@ -1038,14 +1045,14 @@ def main():
                     # 訂正版CSVを作成
                     corrected_df = st.session_state.csv_system.create_corrected_csv(df, results)
                     
-                    # 訂正版CSVをダウンロード
+                    # 訂正版CSVをダウンロード（文字化け対策）
                     csv_buffer = io.StringIO()
                     corrected_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
                     csv_data = csv_buffer.getvalue()
                     
                     st.download_button(
                         label="📥 訂正版CSVをダウンロード",
-                        data=csv_data,
+                        data=csv_data.encode('utf-8-sig'),
                         file_name=f"corrected_{uploaded_file.name}",
                         mime="text/csv"
                     )
