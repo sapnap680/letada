@@ -1079,10 +1079,18 @@ class FastCSVCorrectionSystem:
                 grade_match = re.search(r'(\d+)', grade_value)
                 if grade_match:
                     extracted_grade = grade_match.group(1)
-                    # 元データと比較
+                    # 元データと比較（文字列として比較）
                     try:
                         original_grade = str(row.get('学年', '')).strip()
-                        if original_grade != extracted_grade:
+                        # 元データが数字の場合、文字列化して比較
+                        if original_grade.isdigit():
+                            original_grade_num = original_grade
+                        else:
+                            # 元データから数字を抽出
+                            grade_num_match = re.search(r'(\d+)', original_grade)
+                            original_grade_num = grade_num_match.group(1) if grade_num_match else original_grade
+                        
+                        if original_grade_num != extracted_grade:
                             result['corrections']['学年'] = extracted_grade
                             result['has_correction'] = True
                     except:
@@ -1105,11 +1113,18 @@ class FastCSVCorrectionSystem:
                     except (ValueError, TypeError):
                         pass
             
-            # 元データの異常値をAIで検出
-            validation_warnings = self._validate_player_data_with_ai(row, result['jba_data'])
-            result['validation_warnings'] = validation_warnings
-            
-            return result
+        # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
+        if verification_result.get('status') in ['match', 'partial_match']:
+            jba_data = result.get('jba_data', {})
+            # JBAに体重・身長データがない場合のみ警告
+            if not jba_data.get('weight') and not jba_data.get('height'):
+                validation_warnings = self._validate_player_data_with_ai(row, jba_data)
+                result['validation_warnings'] = validation_warnings
+        else:
+            # JBA登録なしの場合は警告なし
+            result['validation_warnings'] = []
+        
+        return result
         
         except Exception as e:
             import traceback
