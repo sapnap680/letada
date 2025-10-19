@@ -141,3 +141,7 @@ streamlit run csv_verification_system.py
 - カラム名を確認（名前、生年月日が必須）
 
 
+
+
+
+
