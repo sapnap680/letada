@@ -1113,16 +1113,16 @@ class FastCSVCorrectionSystem:
                     except (ValueError, TypeError):
                         pass
             
-        # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
-        if verification_result.get('status') in ['match', 'partial_match']:
-            jba_data = result.get('jba_data', {})
-            # JBAに体重・身長データがない場合のみ警告
-            if not jba_data.get('weight') and not jba_data.get('height'):
-                validation_warnings = self._validate_player_data_with_ai(row, jba_data)
-                result['validation_warnings'] = validation_warnings
-        else:
-            # JBA登録なしの場合は警告なし
-            result['validation_warnings'] = []
+            # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
+            if verification_result.get('status') in ['match', 'partial_match']:
+                jba_data = result.get('jba_data', {})
+                # JBAに体重・身長データがない場合のみ警告
+                if not jba_data.get('weight') and not jba_data.get('height'):
+                    validation_warnings = self._validate_player_data_with_ai(row, jba_data)
+                    result['validation_warnings'] = validation_warnings
+            else:
+                # JBA登録なしの場合は警告なし
+                result['validation_warnings'] = []
         
         return result
         
