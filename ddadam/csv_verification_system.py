@@ -1098,7 +1098,8 @@ class FastCSVCorrectionSystem:
                             pass
                 
                 # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
-                if not jba_data.get('weight') and not jba_data.get('height'):
+                # 体重、出身校のいずれかがJBAにない場合はAI検証を実行
+                if not jba_data.get('weight') or not jba_data.get('school'):
                     validation_warnings = self._validate_player_data_with_ai(row, jba_data)
                     result['validation_warnings'] = validation_warnings
             else:
