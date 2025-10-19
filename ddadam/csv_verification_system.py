@@ -450,7 +450,7 @@ class JBAVerificationSystem:
         """個別選手情報の照合（男子チームのみ）"""
         try:
             # デバッグ情報を表示
-            st.write(f"🔍 選手照合: {player_name}, 生年月日: {birth_date}, 大学: {university}")
+            st.write(f"🔍 選手照合: {player_name}, 大学: {university}")
             
             # 大学のチームを検索（柔軟な照合）
             st.write(f"🔍 チーム検索開始: {university}")
@@ -469,9 +469,6 @@ class JBAVerificationSystem:
                     st.warning(f"❌ {university}の男子チームが見つかりませんでした")
                     return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
-            # 入力された生年月日を正規化
-            normalized_input_date = self.normalize_date_format(birth_date)
-
             # 各チームのメンバー情報を取得して照合
             for team in teams:
                 team_data = self.get_team_members(team['url'])
@@ -480,15 +477,11 @@ class JBAVerificationSystem:
                         # 名前の類似度チェック
                         name_similarity = self.calculate_similarity(player_name, member["name"])
 
-                        # 生年月日の照合（正規化された形式で比較）
-                        jba_date = self.normalize_date_format(member["birth_date"])
-                        birth_match = normalized_input_date == jba_date
-
                         # デバッグ情報を表示
-                        st.write(f"  - JBA選手: {member['name']}, 生年月日: {member['birth_date']}")
-                        st.write(f"  - 名前類似度: {name_similarity:.3f}, 生年月日一致: {birth_match}")
+                        st.write(f"  - JBA選手: {member['name']}")
+                        st.write(f"  - 名前類似度: {name_similarity:.3f}")
                         
-                        if name_similarity >= threshold and birth_match:
+                        if name_similarity >= threshold:
                             st.success(f"✅ 完全一致: {member['name']}")
                             # 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
@@ -499,18 +492,6 @@ class JBAVerificationSystem:
                                 "status": "match",
                                 "jba_data": member,
                                 "similarity": name_similarity
-                            }
-                        elif name_similarity >= threshold:  # 名前は一致するが生年月日が異なる場合
-                            # 詳細情報を取得する場合
-                            if get_details and member.get("detail_url"):
-                                player_details = self.get_player_details(member["detail_url"])
-                                member.update(player_details)
-                            
-                            return {
-                                "status": "name_match_birth_mismatch",
-                                "jba_data": member,
-                                "similarity": name_similarity,
-                                "message": f"名前は一致しますが、生年月日が異なります。JBA登録: {member['birth_date']}"
                             }
 
             return {"status": "not_found", "message": "JBAデータベースに該当する選手が見つかりませんでした"}
@@ -723,13 +704,11 @@ class CSVCorrectionSystem:
             # デバッグ情報を表示
             st.write(f"🔍 行 {index + 1} を処理中...")
             
-            # 選手名と生年月日を取得（カラム名は柔軟に対応）
+            # 選手名のみを取得（生年月日は不要）
             player_name = None
-            birth_date = None
             
             # 様々なカラム名に対応
             name_columns = ['名前', '氏名', '選手名', 'name', 'Name']
-            birth_columns = ['生年月日', '誕生日', 'birth_date', 'Birth Date']
             
             for col in name_columns:
                 if col in df.columns and pd.notna(row[col]):
@@ -737,26 +716,20 @@ class CSVCorrectionSystem:
                     st.write(f"  - 選手名取得: {player_name} (カラム: {col})")
                     break
             
-            for col in birth_columns:
-                if col in df.columns and pd.notna(row[col]):
-                    birth_date = str(row[col]).strip()
-                    st.write(f"  - 生年月日取得: {birth_date} (カラム: {col})")
-                    break
-            
-            if not player_name or not birth_date:
-                st.warning(f"  - 選手名または生年月日が取得できませんでした (選手名: {player_name}, 生年月日: {birth_date})")
+            if not player_name:
+                st.warning(f"  - 選手名が取得できませんでした")
                 results.append({
                     'index': index,
                     'original_data': row.to_dict(),
                     'status': 'missing_data',
-                    'message': '名前または生年月日が不足しています',
+                    'message': '選手名が不足しています',
                     'correction': None
                 })
                 continue
             
             # JBAデータベースと照合（詳細情報も取得するかどうか）
             verification_result = self.jba_system.verify_player_info(
-                player_name, birth_date, university_name, get_details
+                player_name, None, university_name, get_details
             )
             
             # 結果を保存
