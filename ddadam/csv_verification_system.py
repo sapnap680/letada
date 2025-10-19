@@ -228,6 +228,7 @@ class JBAVerificationSystem:
         """チームのメンバー情報を取得（男子チームのみ）"""
         try:
             st.info(f"📊 チームメンバー情報を取得中...")
+            st.write(f"🔍 チームURL: {team_url}")
             
             # チーム詳細ページにアクセス
             team_page = self.session.get(team_url)
@@ -243,6 +244,8 @@ class JBAVerificationSystem:
             title_element = soup.find('title')
             if title_element:
                 team_name = title_element.get_text(strip=True)
+            
+            st.write(f"🔍 チーム名: {team_name}")
 
             # メンバー情報を抽出（男子チームのメンバーテーブルを特定）
             members = []
@@ -473,12 +476,13 @@ class JBAVerificationSystem:
     def verify_player_info(self, player_name, birth_date, university, get_details=False):
         """個別選手情報の照合（男子チームのみ）"""
         try:
-            # デバッグ情報を表示
             st.write(f"🔍 選手照合: {player_name}, 大学: {university}")
             
             # 大学名の検索バリエーションを生成
             search_variations = self.get_search_variations(university)
             st.write(f"🔍 検索バリエーション: {search_variations}")
+            
+            all_matched_members = []  # すべてのマッチ候補を保存
             
             teams = []
             for variation in search_variations:
@@ -496,11 +500,20 @@ class JBAVerificationSystem:
                 st.warning(f"❌ {university}の男子チームが見つかりませんでした")
                 return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
+            # 正規化された入力日付
+            normalized_input_date = self.normalize_date_format(birth_date) if birth_date else None
+
             # 各チームのメンバー情報を取得して照合
             for team in teams:
+                st.write(f"🔍 チーム: {team['name']} のメンバーを取得中...")
                 team_data = self.get_team_members(team['url'])
+                
                 if team_data and team_data["members"]:
-                    for member in team_data["members"]:
+                    st.write(f"🔍 メンバー数: {len(team_data['members'])}人")
+                    
+                    for i, member in enumerate(team_data["members"]):
+                        st.write(f"  - メンバー{i+1}: {member['name']}")
+                        
                         # 名前の類似度チェック
                         name_similarity = self.calculate_similarity(player_name, member["name"])
 
@@ -508,8 +521,19 @@ class JBAVerificationSystem:
                         st.write(f"  - JBA選手: {member['name']}")
                         st.write(f"  - 名前類似度: {name_similarity:.3f}")
                         
-                        if name_similarity >= threshold:
+                        # 生年月日の照合
+                        if normalized_input_date and birth_date:
+                            jba_date = self.normalize_date_format(member["birth_date"])
+                            birth_match = normalized_input_date == jba_date
+                            st.write(f"  - 入力日付: {normalized_input_date}, JBA日付: {jba_date}, 一致: {birth_match}")
+                        else:
+                            birth_match = True  # 生年月日が入力されていない場合はスキップ
+                            st.write(f"  - 生年月日チェック: スキップ")
+
+                        # 閾値1.0以上かつ生年月日一致で完全一致
+                        if name_similarity >= threshold and birth_match:
                             st.success(f"✅ 完全一致: {member['name']}")
+                            
                             # 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
                                 player_details = self.get_player_details(member["detail_url"])
@@ -520,6 +544,27 @@ class JBAVerificationSystem:
                                 "jba_data": member,
                                 "similarity": name_similarity
                             }
+                        
+                        # 名前は一致するが生年月日が異なる場合（後で返す用に保存）
+                        elif name_similarity >= threshold and not birth_match and birth_date:
+                            st.warning(f"⚠️ 名前一致（類似度: {name_similarity:.3f}）だが生年月日相違")
+                            
+                            if get_details and member.get("detail_url"):
+                                player_details = self.get_player_details(member["detail_url"])
+                                member.update(player_details)
+                            
+                            all_matched_members.append({
+                                "status": "name_match_birth_mismatch",
+                                "jba_data": member,
+                                "similarity": name_similarity,
+                                "message": f"名前は一致しますが、生年月日が異なります。JBA登録: {member['birth_date']}"
+                            })
+                else:
+                    st.warning(f"❌ チーム {team['name']} のメンバー情報が取得できませんでした")
+
+            # 名前一致で生年月日不一致のものがあれば返す
+            if all_matched_members:
+                return all_matched_members[0]  # 最初のマッチを返す
 
             return {"status": "not_found", "message": "JBAデータベースに該当する選手が見つかりませんでした"}
 
