@@ -453,7 +453,9 @@ class JBAVerificationSystem:
             st.write(f"🔍 選手照合: {player_name}, 生年月日: {birth_date}, 大学: {university}")
             
             # 大学のチームを検索（柔軟な照合）
+            st.write(f"🔍 チーム検索開始: {university}")
             teams = self.search_teams_by_university(university)
+            st.write(f"🔍 検索結果: {len(teams)}チーム見つかりました")
 
             if not teams:
                 # 正規化された大学名で再検索
@@ -461,6 +463,7 @@ class JBAVerificationSystem:
                 if normalized_university != university:
                     st.info(f"🔄 正規化された大学名で再検索: {normalized_university}")
                     teams = self.search_teams_by_university(normalized_university)
+                    st.write(f"🔍 再検索結果: {len(teams)}チーム見つかりました")
                 
                 if not teams:
                     st.warning(f"❌ {university}の男子チームが見つかりませんでした")
@@ -731,14 +734,17 @@ class CSVCorrectionSystem:
             for col in name_columns:
                 if col in df.columns and pd.notna(row[col]):
                     player_name = str(row[col]).strip()
+                    st.write(f"  - 選手名取得: {player_name} (カラム: {col})")
                     break
             
             for col in birth_columns:
                 if col in df.columns and pd.notna(row[col]):
                     birth_date = str(row[col]).strip()
+                    st.write(f"  - 生年月日取得: {birth_date} (カラム: {col})")
                     break
             
             if not player_name or not birth_date:
+                st.warning(f"  - 選手名または生年月日が取得できませんでした (選手名: {player_name}, 生年月日: {birth_date})")
                 results.append({
                     'index': index,
                     'original_data': row.to_dict(),
