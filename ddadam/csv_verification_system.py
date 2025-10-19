@@ -1016,7 +1016,7 @@ class FastCSVCorrectionSystem:
                     'corrections': {},
                     'jba_data': {},
                     'validation_warnings': [],
-                    'has_correction': False  # 訂正なし
+                    'has_correction': False
                 }
             
             # JBAデータベースと照合
@@ -1032,8 +1032,11 @@ class FastCSVCorrectionSystem:
                 'corrections': {},
                 'jba_data': {},
                 'validation_warnings': [],
-                'has_correction': False  # 訂正フラグ
+                'has_correction': False
             }
+            
+            # jba_data を事前に初期化
+            jba_data = {}
             
             if verification_result.get('status') in ['match', 'partial_match']:
                 jba_data = verification_result.get('jba_data', {})
@@ -1044,85 +1047,64 @@ class FastCSVCorrectionSystem:
                     result['corrections'][name_column] = jba_data['name']
                     result['has_correction'] = True
                 
-            # 体重：JBAにあれば優先し、元データと異なる場合のみ訂正
-            if jba_data.get('weight') and str(jba_data['weight']).strip():
-                weight_value = str(jba_data['weight']).strip()
-                # 数字だけを抽出
-                weight_match = re.search(r'(\d+\.?\d*)', weight_value)
-                if weight_match:
-                    extracted_weight = weight_match.group(1)
-                    # 元データと比較（数値として比較）
-                    try:
-                        original_weight = float(row.get('体重', 0))
-                        jba_weight = float(extracted_weight)
-                        if original_weight != jba_weight:
-                            result['corrections']['体重'] = extracted_weight
-                            result['has_correction'] = True
-                    except (ValueError, TypeError):
-                        pass
-            else:
-                # JBAに体重がない場合、元データの妥当性をAIでチェック
-                if pd.notna(row.get('体重')):
-                    weight = row.get('体重')
-                    try:
-                        weight_value = float(weight)
-                        weight_validation = self.validator.gemini_validator.validate_weight_with_ai(weight)
-                        if not weight_validation['is_valid']:
-                            result['validation_warnings'].append(weight_validation['reason'])
-                    except (ValueError, TypeError):
-                        result['validation_warnings'].append(f"体重が数値ではない: {weight}")
-            
-            # 学年：JBAに記載があれば、数字だけを抽出し、元データと異なる場合のみ訂正
-            if jba_data.get('grade') and str(jba_data['grade']).strip():
-                grade_value = str(jba_data['grade']).strip()
-                # 数字だけを抽出
-                grade_match = re.search(r'(\d+)', grade_value)
-                if grade_match:
-                    extracted_grade = grade_match.group(1)
-                    # 元データと比較（文字列として比較）
-                    try:
-                        original_grade = str(row.get('学年', '')).strip()
-                        # 元データが数字の場合、文字列化して比較
-                        if original_grade.isdigit():
-                            original_grade_num = original_grade
-                        else:
-                            # 元データから数字を抽出
-                            grade_num_match = re.search(r'(\d+)', original_grade)
-                            original_grade_num = grade_num_match.group(1) if grade_num_match else original_grade
-                        
-                        if original_grade_num != extracted_grade:
-                            result['corrections']['学年'] = extracted_grade
-                            result['has_correction'] = True
-                    except:
-                        pass
-            
-            # 身長：JBAに記載があれば、数字だけを抽出し、元データと異なる場合のみ訂正
-            if jba_data.get('height') and str(jba_data['height']).strip():
-                height_value = str(jba_data['height']).strip()
-                # 数字だけを抽出
-                height_match = re.search(r'(\d+\.?\d*)', height_value)
-                if height_match:
-                    extracted_height = height_match.group(1)
-                    # 元データと比較（数値として比較）
-                    try:
-                        original_height = float(row.get('身長', 0))
-                        jba_height = float(extracted_height)
-                        if original_height != jba_height:
-                            result['corrections']['身長'] = extracted_height
-                            result['has_correction'] = True
-                    except (ValueError, TypeError):
-                        pass
-            
-            # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
-            if verification_result.get('status') in ['match', 'partial_match']:
-                jba_data = result.get('jba_data', {})
-                # JBAに体重・身長データがない場合のみ警告
+                # 体重：JBAにあれば優先し、元データと異なる場合のみ訂正
+                if jba_data.get('weight') and str(jba_data['weight']).strip():
+                    weight_value = str(jba_data['weight']).strip()
+                    weight_match = re.search(r'(\d+\.?\d*)', weight_value)
+                    if weight_match:
+                        extracted_weight = weight_match.group(1)
+                        try:
+                            original_weight = float(row.get('体重', 0))
+                            jba_weight = float(extracted_weight)
+                            if original_weight != jba_weight:
+                                result['corrections']['体重'] = extracted_weight
+                                result['has_correction'] = True
+                        except (ValueError, TypeError):
+                            pass
+                
+                # 学年：JBAに記載があれば、数字だけを抽出し、元データと異なる場合のみ訂正
+                if jba_data.get('grade') and str(jba_data['grade']).strip():
+                    grade_value = str(jba_data['grade']).strip()
+                    grade_match = re.search(r'(\d+)', grade_value)
+                    if grade_match:
+                        extracted_grade = grade_match.group(1)
+                        try:
+                            original_grade = str(row.get('学年', '')).strip()
+                            if original_grade.isdigit():
+                                original_grade_num = original_grade
+                            else:
+                                grade_num_match = re.search(r'(\d+)', original_grade)
+                                original_grade_num = grade_num_match.group(1) if grade_num_match else original_grade
+                            
+                            if original_grade_num != extracted_grade:
+                                result['corrections']['学年'] = extracted_grade
+                                result['has_correction'] = True
+                        except:
+                            pass
+                
+                # 身長：JBAに記載があれば、数字だけを抽出し、元データと異なる場合のみ訂正
+                if jba_data.get('height') and str(jba_data['height']).strip():
+                    height_value = str(jba_data['height']).strip()
+                    height_match = re.search(r'(\d+\.?\d*)', height_value)
+                    if height_match:
+                        extracted_height = height_match.group(1)
+                        try:
+                            original_height = float(row.get('身長', 0))
+                            jba_height = float(extracted_height)
+                            if original_height != jba_height:
+                                result['corrections']['身長'] = extracted_height
+                                result['has_correction'] = True
+                        except (ValueError, TypeError):
+                            pass
+                
+                # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
                 if not jba_data.get('weight') and not jba_data.get('height'):
                     validation_warnings = self._validate_player_data_with_ai(row, jba_data)
                     result['validation_warnings'] = validation_warnings
             else:
-                # JBA登録なしの場合は警告なし
-                result['validation_warnings'] = []
+                # JBA登録なし・未発見の場合も警告をチェック
+                validation_warnings = self._validate_player_data_with_ai(row, {})
+                result['validation_warnings'] = validation_warnings
             
             return result
         
