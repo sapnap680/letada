@@ -1121,37 +1121,29 @@ class FastCSVCorrectionSystem:
             }
     
     def _validate_player_data_with_ai(self, row, jba_data):
-        """元データの異常値をAIで検出"""
+        """元データの異常値をAIで検出（JBAに記載がない場合のみ）"""
         warnings = []
         
-        # 体重チェック
-        if pd.notna(row.get('体重')):
+        # 体重：JBAに記載がない場合のみAIで検証
+        if not jba_data.get('weight') and pd.notna(row.get('体重')):
             weight = row.get('体重')
             try:
                 weight_value = float(weight)
-                if weight_value < 40 or weight_value > 150:
-                    warnings.append(f"⚠️ 体重が異常値: {weight}kg（通常40-150kg）")
+                weight_validation = self.validator.gemini_validator.validate_weight_with_ai(weight_value)
+                if not weight_validation['is_valid']:
+                    warnings.append(weight_validation['reason'])
             except (ValueError, TypeError):
                 warnings.append(f"⚠️ 体重が数値ではない: {weight}")
         
-        # 出身校チェック
-        if pd.notna(row.get('出身校')):
+        # 出身校：JBAに記載がない場合のみAIで検証
+        if not jba_data.get('school') and pd.notna(row.get('出身校')):
             school = row.get('出身校')
-            if not school or str(school).strip() == "" or len(str(school)) < 2:
-                warnings.append(f"⚠️ 出身校が不適切: '{school}'")
-            # 明らかにおかしい値の検出
-            elif any(bad_word in str(school) for bad_word in ['おちん', 'ちんぽ', 'ああ', 'test', 'テスト']):
-                warnings.append(f"⚠️ 出身校がテスト/不適切な値: '{school}'")
+            if school and str(school).strip() != "":
+                school_validation = self.validator.gemini_validator.validate_and_correct_school_with_ai(str(school).strip())
+                if not school_validation['is_valid']:
+                    warnings.append(school_validation['reason'])
         
-        # 身長チェック
-        if pd.notna(row.get('身長')):
-            height = row.get('身長')
-            try:
-                height_value = float(str(height).replace('cm', ''))
-                if height_value < 150 or height_value > 230:
-                    warnings.append(f"⚠️ 身長が異常値: {height}cm（通常150-230cm）")
-            except (ValueError, TypeError):
-                warnings.append(f"⚠️ 身長が数値ではない: {height}")
+        # 身長はJBAに必ず記載されているのでAI検証不要
         
         return warnings
     
