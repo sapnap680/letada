@@ -837,13 +837,6 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    # システム初期化
-    if 'jba_system' not in st.session_state:
-        st.session_state.jba_system = JBAVerificationSystem()
-    
-    if 'csv_system' not in st.session_state:
-        st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, openai_api_key if use_ai_validation else None)
-    
     # サイドバー
     with st.sidebar:
         st.header("🔐 JBAログイン情報")
@@ -867,6 +860,13 @@ def main():
         st.subheader("🤖 AI検証設定")
         openai_api_key = st.text_input("OpenAI APIキー", type="password", placeholder="sk-...", help="ChatGPTレベルのAI検証を使用する場合はAPIキーを入力してください。未入力の場合は従来の検証を使用します。")
         use_ai_validation = st.checkbox("AI検証を使用", value=bool(openai_api_key), help="OpenAI APIを使用した高度なAI検証を有効にします。")
+    
+    # システム初期化
+    if 'jba_system' not in st.session_state:
+        st.session_state.jba_system = JBAVerificationSystem()
+    
+    # CSVシステムを毎回更新（APIキーの変更に対応）
+    st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, openai_api_key if use_ai_validation else None)
     
     # メインコンテンツ
     st.header("📄 CSVファイル処理")
