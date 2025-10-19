@@ -99,12 +99,12 @@ streamlit run csv_verification_system.py
    - 取得できない場合は警告を表示
 
 5. **AI異常値検出（体重・出身校のみ）**
-   - **体重**: OpenAI APIによる高度な検証
-     - ChatGPTレベルのAI判断による体重検証
+   - **体重**: Google Gemini APIによる高度な検証
+     - Gemini 1.5 FlashレベルのAI判断による体重検証
      - バスケットボール選手としての妥当性を評価
      - 極端な値や不自然な精度を検出
-   - **出身校**: OpenAI APIによる高度な検証・訂正
-     - ChatGPTレベルのAI判断による学校名検証
+   - **出身校**: Google Gemini APIによる高度な検証・訂正
+     - Gemini 1.5 FlashレベルのAI判断による学校名検証
      - 漢字ミスや略称の正式名称化を自動実行
      - 留学生の学校名も適切に処理
      - 有名な高校・大学・予備校の知識を活用
@@ -115,8 +115,8 @@ streamlit run csv_verification_system.py
 - **類似度閾値**: 0.1〜1.0（デフォルト: 0.8）
 - **大学名**: 照合対象の大学名
 - **詳細情報取得**: 身長・体重・ポジション等の詳細情報を取得するかどうか
-- **OpenAI APIキー**: ChatGPTレベルのAI検証を使用する場合のAPIキー
-- **AI検証**: OpenAI APIを使用した高度なAI検証の有効/無効
+- **Gemini APIキー**: Google Gemini APIを使用した高度なAI検証のAPIキー
+- **AI検証**: Gemini APIを使用した高度なAI検証の有効/無効
 
 ## 注意事項
 

@@ -14,7 +14,8 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 import io
-import openai
+import google.generativeai as genai
+import os
 
 # ページ設定
 st.set_page_config(
@@ -469,18 +470,21 @@ class JBAVerificationSystem:
         except Exception as e:
             return {"status": "error", "message": f"照合エラー: {str(e)}"}
 
-class OpenAIValidator:
-    """OpenAI APIを使用したAI検証システム"""
+class GeminiValidator:
+    """Google Gemini APIを使用したAI検証システム"""
     
     def __init__(self, api_key=None):
         self.api_key = api_key
         if api_key:
-            openai.api_key = api_key
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel("gemini-1.5-flash")
+        else:
+            self.model = None
     
     def validate_weight_with_ai(self, weight):
-        """OpenAI APIを使用した体重検証"""
-        if not self.api_key:
-            return {'is_valid': True, 'reason': 'OpenAI APIキーが設定されていません', 'correction': None}
+        """Gemini APIを使用した体重検証"""
+        if not self.api_key or not self.model:
+            return {'is_valid': True, 'reason': 'Gemini APIキーが設定されていません', 'correction': None}
         
         try:
             prompt = f"""
@@ -489,38 +493,45 @@ class OpenAIValidator:
             
             体重: {weight}kg
             
-            以下の形式で回答してください：
-            - 正常: 正常な体重です
-            - 異常: 異常な体重です（理由）
-            - 訂正: 訂正が必要です（推奨値）
+            以下のJSON形式で回答してください：
+            {{
+                "status": "normal|abnormal|correction",
+                "reason": "理由の説明",
+                "suggested_value": "推奨値（訂正の場合のみ）"
+            }}
             """
             
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "あなたはバスケットボール選手のデータを検証する専門家です。"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=200,
-                temperature=0.1
-            )
+            response = self.model.generate_content(prompt)
+            result = response.text.strip()
             
-            result = response.choices[0].message.content.strip()
-            
-            if "異常" in result:
-                return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
-            elif "訂正" in result:
-                return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
-            else:
-                return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
+            try:
+                # JSON形式の回答を解析
+                import json
+                data = json.loads(result)
+                
+                if data.get("status") == "abnormal":
+                    return {'is_valid': False, 'reason': f'AI検証: {data.get("reason", "異常な体重です")}', 'correction': None}
+                elif data.get("status") == "correction":
+                    return {'is_valid': False, 'reason': f'AI検証: {data.get("reason", "訂正が必要です")}', 'correction': data.get("suggested_value")}
+                else:
+                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
+            except (json.JSONDecodeError, KeyError):
+                # JSON解析に失敗した場合は従来の方法で判定
+                result_lower = result.lower()
+                if "異常" in result_lower or "abnormal" in result_lower:
+                    return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
+                elif "訂正" in result_lower or "correction" in result_lower:
+                    return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
+                else:
+                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
                 
         except Exception as e:
-            return {'is_valid': True, 'reason': f'OpenAI API エラー: {str(e)}', 'correction': None}
+            return {'is_valid': True, 'reason': f'Gemini API エラー: {str(e)}', 'correction': None}
     
     def validate_and_correct_school_with_ai(self, school_name):
-        """OpenAI APIを使用した出身校検証と訂正"""
-        if not self.api_key:
-            return {'is_valid': True, 'reason': 'OpenAI APIキーが設定されていません', 'correction': None}
+        """Gemini APIを使用した出身校検証と訂正"""
+        if not self.api_key or not self.model:
+            return {'is_valid': True, 'reason': 'Gemini APIキーが設定されていません', 'correction': None}
         
         try:
             prompt = f"""
@@ -534,69 +545,77 @@ class OpenAIValidator:
             3. 正式名称に訂正が必要かどうか
             4. 留学生の場合は適切に処理する
             
-            以下の形式で回答してください：
-            - 正常: 正常な学校名です
-            - 異常: 異常な学校名です（理由）
-            - 訂正: 訂正が必要です（正式名称）
+            以下のJSON形式で回答してください：
+            {{
+                "status": "normal|abnormal|correction",
+                "reason": "理由の説明",
+                "corrected_name": "訂正後の学校名（訂正の場合のみ）"
+            }}
             """
             
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "あなたは日本の学校名を検証・訂正する専門家です。有名な高校、大学、予備校、留学生の学校名について詳しい知識を持っています。"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=300,
-                temperature=0.1
-            )
+            response = self.model.generate_content(prompt)
+            result = response.text.strip()
             
-            result = response.choices[0].message.content.strip()
-            
-            if "異常" in result:
-                return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
-            elif "訂正" in result:
-                # 訂正された学校名を抽出
-                correction_match = re.search(r'訂正: (.+)', result)
-                if correction_match:
-                    corrected_name = correction_match.group(1).strip()
-                    return {'is_valid': True, 'reason': f'AI検証: {result}', 'correction': corrected_name}
+            try:
+                # JSON形式の回答を解析
+                import json
+                data = json.loads(result)
+                
+                if data.get("status") == "abnormal":
+                    return {'is_valid': False, 'reason': f'AI検証: {data.get("reason", "異常な学校名です")}', 'correction': None}
+                elif data.get("status") == "correction":
+                    corrected_name = data.get("corrected_name", "")
+                    return {'is_valid': True, 'reason': f'AI検証: {data.get("reason", "訂正が必要です")}', 'correction': corrected_name}
                 else:
-                    return {'is_valid': True, 'reason': f'AI検証: {result}', 'correction': None}
-            else:
-                return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
+                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
+            except (json.JSONDecodeError, KeyError):
+                # JSON解析に失敗した場合は従来の方法で判定
+                result_lower = result.lower()
+                if "異常" in result_lower or "abnormal" in result_lower:
+                    return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
+                elif "訂正" in result_lower or "correction" in result_lower:
+                    # 訂正された学校名を抽出
+                    correction_match = re.search(r'訂正: (.+)', result)
+                    if correction_match:
+                        corrected_name = correction_match.group(1).strip()
+                        return {'is_valid': True, 'reason': f'AI検証: {result}', 'correction': corrected_name}
+                    else:
+                        return {'is_valid': True, 'reason': f'AI検証: {result}', 'correction': None}
+                else:
+                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
                 
         except Exception as e:
-            return {'is_valid': True, 'reason': f'OpenAI API エラー: {str(e)}', 'correction': None}
+            return {'is_valid': True, 'reason': f'Gemini API エラー: {str(e)}', 'correction': None}
 
 class DataValidator:
     """データ検証システム"""
     
-    def __init__(self, openai_api_key=None):
-        # OpenAI API検証システム
-        self.openai_validator = OpenAIValidator(openai_api_key)
+    def __init__(self, gemini_api_key=None):
+        # Gemini API検証システム
+        self.gemini_validator = GeminiValidator(gemini_api_key)
     
     def validate_weight(self, weight):
-        """体重の妥当性を検証（OpenAI API版）"""
+        """体重の妥当性を検証（Gemini API版）"""
         if not weight:
             return True, []
         
-        # OpenAI APIによる検証
-        ai_validation = self.openai_validator.validate_weight_with_ai(weight)
+        # Gemini APIによる検証
+        ai_validation = self.gemini_validator.validate_weight_with_ai(weight)
         if not ai_validation['is_valid']:
             return False, [ai_validation['reason']]
         
         return True, []
     
     def validate_and_correct_school(self, school_name):
-        """出身校の妥当性を検証し、必要に応じて訂正を提案（OpenAI API版）"""
+        """出身校の妥当性を検証し、必要に応じて訂正を提案（Gemini API版）"""
         if not school_name or school_name.strip() == "":
             return True, [], None  # 空の場合は問題なし
         
         issues = []
         correction = None
         
-        # OpenAI APIによる出身校検証と訂正
-        ai_validation = self.openai_validator.validate_and_correct_school_with_ai(school_name)
+        # Gemini APIによる出身校検証と訂正
+        ai_validation = self.gemini_validator.validate_and_correct_school_with_ai(school_name)
         if not ai_validation['is_valid']:
             issues.append(ai_validation['reason'])
         elif ai_validation['correction']:
@@ -630,9 +649,9 @@ class DataValidator:
 class CSVCorrectionSystem:
     """CSV自動訂正システム"""
     
-    def __init__(self, jba_system, openai_api_key=None):
+    def __init__(self, jba_system, gemini_api_key=None):
         self.jba_system = jba_system
-        self.validator = DataValidator(openai_api_key)
+        self.validator = DataValidator(gemini_api_key)
     
     def process_csv_file(self, df, university_name, threshold=0.8, get_details=False):
         """CSVファイルを処理して訂正版を作成"""
@@ -846,11 +865,19 @@ def main():
         if st.button("JBAにログイン", type="primary"):
             if email and password:
                 if st.session_state.jba_system.login(email, password):
+                    st.session_state.jba_logged_in = True
                     st.success("ログイン成功")
                 else:
+                    st.session_state.jba_logged_in = False
                     st.error("ログイン失敗")
             else:
                 st.error("ログイン情報を入力してください")
+        
+        # ログイン状態の表示
+        if st.session_state.jba_logged_in:
+            st.success("✅ JBAにログイン済み")
+        else:
+            st.warning("⚠️ JBAにログインしてください")
         
         st.header("⚙️ 設定")
         threshold = st.slider("類似度閾値", 0.1, 1.0, 0.8, 0.05)
@@ -858,15 +885,19 @@ def main():
         get_details = st.checkbox("詳細情報を取得（身長・体重・ポジション等）", value=False, help="チェックすると、選手詳細ページから身長・体重・ポジション・出身校・学年情報も取得します。処理時間が長くなります。")
         
         st.subheader("🤖 AI検証設定")
-        openai_api_key = st.text_input("OpenAI APIキー", type="password", placeholder="sk-...", help="ChatGPTレベルのAI検証を使用する場合はAPIキーを入力してください。未入力の場合は従来の検証を使用します。")
-        use_ai_validation = st.checkbox("AI検証を使用", value=bool(openai_api_key), help="OpenAI APIを使用した高度なAI検証を有効にします。")
+        gemini_api_key = st.text_input("Gemini APIキー", type="password", placeholder="AIzaSy...", help="Google Gemini APIを使用した高度なAI検証を有効にします。")
+        use_ai_validation = st.checkbox("AI検証を使用", value=bool(gemini_api_key), help="Gemini APIを使用した高度なAI検証を有効にします。")
     
     # システム初期化
     if 'jba_system' not in st.session_state:
         st.session_state.jba_system = JBAVerificationSystem()
     
+    # ログイン状態の復元チェック
+    if 'jba_logged_in' not in st.session_state:
+        st.session_state.jba_logged_in = False
+    
     # CSVシステムを毎回更新（APIキーの変更に対応）
-    st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, openai_api_key if use_ai_validation else None)
+    st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, gemini_api_key if use_ai_validation else None)
     
     # メインコンテンツ
     st.header("📄 CSVファイル処理")
@@ -880,9 +911,22 @@ def main():
     
     if uploaded_file is not None:
         try:
-            # CSVファイルを読み込み
-            df = pd.read_csv(uploaded_file)
-            st.success(f"✅ CSVファイルを読み込みました ({len(df)}行)")
+            # CSVファイルを読み込み（複数のエンコーディングを試行）
+            encodings = ['utf-8', 'shift_jis', 'cp932', 'utf-8-sig', 'iso-2022-jp']
+            df = None
+            
+            for encoding in encodings:
+                try:
+                    uploaded_file.seek(0)  # ファイルポインタをリセット
+                    df = pd.read_csv(uploaded_file, encoding=encoding)
+                    st.success(f"✅ CSVファイルを読み込みました ({len(df)}行) - エンコーディング: {encoding}")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if df is None:
+                st.error("❌ CSVファイルの文字エンコーディングが判別できませんでした。ファイルをUTF-8で保存し直してください。")
+                st.stop()
             
             # データプレビュー
             st.subheader("📊 データプレビュー")
@@ -895,7 +939,7 @@ def main():
             
             # 処理実行
             if st.button("🚀 自動訂正を実行", type="primary"):
-                if not st.session_state.jba_system.logged_in:
+                if not st.session_state.jba_logged_in:
                     st.error("❌ 先にJBAにログインしてください")
                 elif not university_name:
                     st.error("❌ 大学名を入力してください")
