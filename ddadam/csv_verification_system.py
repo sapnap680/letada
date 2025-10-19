@@ -994,16 +994,19 @@ class FastCSVCorrectionSystem:
         return teams_data
     
     def _process_single_player(self, row_data):
-        """単一選手を処理"""
+        """単一選手を処理（名前統一 + AI検証版）"""
         index, row, university_name, threshold = row_data
         
         try:
+            # 選手名を取得
             player_name = None
+            name_column = None
             name_columns = ['選手名', '氏名', 'name', 'Name']
             
             for col in name_columns:
                 if col in row.index and pd.notna(row[col]):
                     player_name = str(row[col]).strip()
+                    name_column = col
                     break
             
             if not player_name:
@@ -1011,8 +1014,9 @@ class FastCSVCorrectionSystem:
                     'index': index,
                     'original_data': row.to_dict(),
                     'status': 'missing_data',
-                    'message': '選手名が取得できませんでした',
-                    'corrections': {}
+                    'corrections': {},
+                    'jba_data': {},
+                    'validation_warnings': []
                 }
             
             # JBAデータベースと照合
@@ -1024,33 +1028,55 @@ class FastCSVCorrectionSystem:
                 'index': index,
                 'original_data': row.to_dict(),
                 'verification_result': verification_result,
-                'status': verification_result['status'],
-                'corrections': {}
+                'status': verification_result.get('status', 'error'),
+                'corrections': {},
+                'jba_data': {},
+                'validation_warnings': []
             }
             
-            # 完全一致または部分一致の場合、JBAデータで上書き
-            if verification_result['status'] in ['match', 'partial_match']:
+            # 一致または部分一致の場合
+            if verification_result.get('status') in ['match', 'partial_match']:
                 jba_data = verification_result.get('jba_data', {})
+                result['jba_data'] = jba_data
                 
-                # JBAデータで訂正する項目（体重・出身校・背番号以外）
-                if 'height' in jba_data and jba_data['height']:
-                    result['corrections']['身長'] = jba_data['height']
-                if 'position' in jba_data and jba_data['position']:
-                    result['corrections']['ポジション'] = jba_data['position']
-                if 'grade' in jba_data and jba_data['grade']:
-                    result['corrections']['学年'] = jba_data['grade']
+                # ★ 重要：名前をJBA側に統一
+                if jba_data.get('name') and jba_data['name'] != player_name:
+                    result['corrections'][name_column] = jba_data['name']
                 
-                # 体重・出身校・背番号はAI評価のみ（訂正しない）
-                validation_is_valid, validation_issues = self.validator.validate_player_data(jba_data)
-                
-                if not validation_is_valid:
-                    result['validation_issues'] = validation_issues
-                    result['message'] = f"JBAデータと照合済み。警告: {', '.join(validation_issues)}"
+                # ★ 体重：JBAに記載があれば優先、なければAIでチェック
+                if jba_data.get('weight') and str(jba_data['weight']).strip():
+                    weight_value = jba_data['weight']
+                    if 'kg' not in str(weight_value):
+                        weight_value = f"{weight_value}kg"
+                    result['corrections']['体重'] = weight_value
                 else:
-                    result['message'] = "JBAデータと照合済み"
+                    # JBAに体重がない場合は、元データの妥当性をAIでチェック
+                    if pd.notna(row.get('体重')):
+                        weight = row.get('体重')
+                        try:
+                            weight_value = float(weight)
+                            # AIで妥当性チェック
+                            weight_validation = self.validator.gemini_validator.validate_weight_with_ai(weight)
+                            if not weight_validation['is_valid']:
+                                result['validation_warnings'].append(weight_validation['reason'])
+                        except (ValueError, TypeError):
+                            result['validation_warnings'].append(f"体重が数値ではない: {weight}")
+                
+                # その他のJBAデータを追加
+                COLUMN_MAPPING = {
+                    'grade': '学年',
+                    'uniform_number': '背番号',
+                }
+                
+                for jba_key, csv_col in COLUMN_MAPPING.items():
+                    if jba_key in jba_data and jba_data[jba_key]:
+                        value = jba_data[jba_key]
+                        if str(value).strip():
+                            result['corrections'][csv_col] = value
             
-            else:
-                result['message'] = verification_result.get('message', '照合できませんでした')
+            # ★ 新規：元データの異常値をAIで検出
+            validation_warnings = self._validate_player_data_with_ai(row, result['jba_data'])
+            result['validation_warnings'] = validation_warnings
             
             return result
         
@@ -1060,17 +1086,52 @@ class FastCSVCorrectionSystem:
                 'index': index,
                 'original_data': row.to_dict(),
                 'status': 'error',
-                'message': f'エラー: {str(e)}',
                 'corrections': {},
+                'jba_data': {},
+                'validation_warnings': [f'エラー: {str(e)}'],
                 'error_detail': traceback.format_exc()
             }
+    
+    def _validate_player_data_with_ai(self, row, jba_data):
+        """元データの異常値をAIで検出"""
+        warnings = []
+        
+        # 体重チェック
+        if pd.notna(row.get('体重')):
+            weight = row.get('体重')
+            try:
+                weight_value = float(weight)
+                if weight_value < 40 or weight_value > 150:
+                    warnings.append(f"⚠️ 体重が異常値: {weight}kg（通常40-150kg）")
+            except (ValueError, TypeError):
+                warnings.append(f"⚠️ 体重が数値ではない: {weight}")
+        
+        # 出身校チェック
+        if pd.notna(row.get('出身校')):
+            school = row.get('出身校')
+            if not school or str(school).strip() == "" or len(str(school)) < 2:
+                warnings.append(f"⚠️ 出身校が不適切: '{school}'")
+            # 明らかにおかしい値の検出
+            elif any(bad_word in str(school) for bad_word in ['おちん', 'ちんぽ', 'ああ', 'test', 'テスト']):
+                warnings.append(f"⚠️ 出身校がテスト/不適切な値: '{school}'")
+        
+        # 身長チェック
+        if pd.notna(row.get('身長')):
+            height = row.get('身長')
+            try:
+                height_value = float(str(height).replace('cm', ''))
+                if height_value < 150 or height_value > 230:
+                    warnings.append(f"⚠️ 身長が異常値: {height}cm（通常150-230cm）")
+            except (ValueError, TypeError):
+                warnings.append(f"⚠️ 身長が数値ではない: {height}")
+        
+        return warnings
     
     def process_csv_file_parallel(self, df, university_name, threshold=1.0):
         """CSVファイルを並列処理で高速に処理"""
         
-        st.info("ステップ1: 大学データを事前取得中...")
+        st.info("ステップ1: データを並列処理中...")
         
-        # 処理用のデータを準備
         process_data = [
             (index, row, university_name, threshold)
             for index, row in df.iterrows()
@@ -1094,33 +1155,54 @@ class FastCSVCorrectionSystem:
                 progress = completed / len(futures)
                 progress_bar.progress(progress)
                 
-                player_name = result['original_data'].get('選手名', result['original_data'].get('氏名', 'Unknown'))
+                player_name = result['original_data'].get('選手名', 'Unknown')
                 status_text.text(f"処理中: {completed}/{len(futures)} - {player_name}")
         
         elapsed_time = time.time() - start_time
         
         progress_bar.progress(1.0)
-        status_text.text(f"✅ 処理完了 ({elapsed_time:.2f}秒)")
-        st.success(f"✅ {len(df)}行を{elapsed_time:.2f}秒で処理しました (平均: {elapsed_time/len(df):.2f}秒/行)")
+        status_text.text("✅ 処理完了")
         
         results.sort(key=lambda x: x['index'])
+        
+        # ★ 結果サマリーを表示
+        st.success(f"✅ {len(df)}行を{elapsed_time:.2f}秒で処理しました")
+        
+        # 統計情報
+        matched = sum(1 for r in results if r['status'] == 'match')
+        partial = sum(1 for r in results if r['status'] == 'partial_match')
+        warnings_count = sum(len(r.get('validation_warnings', [])) for r in results)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("JBA一致", matched)
+        with col2:
+            st.metric("部分一致", partial)
+        with col3:
+            st.metric("⚠️ 警告", warnings_count)
+        with col4:
+            st.metric("処理時間", f"{elapsed_time:.2f}秒")
+        
         return results
     
     def create_corrected_csv(self, df, results):
-        """訂正版CSVを作成（変更があったセルのみ赤字）"""
+        """修正版CSVを作成"""
         corrected_df = df.copy()
         
         for result in results:
-            if result.get('corrections'):
-                index = result['index']
+            index = result['index']
+            corrections = result.get('corrections', {})
+            
+            if not corrections:
+                continue
+            
+            # 各修正項目をCSVに反映
+            for csv_col, corrected_value in corrections.items():
+                if csv_col not in corrected_df.columns:
+                    corrected_df[csv_col] = None
                 
-                # 訂正がある項目のみ変更
-                for col, value in result['corrections'].items():
-                    if col in corrected_df.columns:
-                        original_value = corrected_df.at[index, col]
-                        # 元の値と異なる場合のみ赤字で表示
-                        if str(original_value) != str(value):
-                            corrected_df.at[index, col] = value
+                # 修正値を適用
+                corrected_df.at[index, csv_col] = corrected_value
         
         return corrected_df
 
@@ -1544,14 +1626,14 @@ def main():
                             st.success("全て発見されました")
                     
                     with tab4:
-                        warning_results = [r for r in results if 'validation_issues' in r]
+                        warning_results = [r for r in results if r.get('validation_warnings')]
                         if warning_results:
                             st.write(f"**警告: {len(warning_results)}件**")
                             for result in warning_results:
                                 player_name = result['original_data'].get('選手名', 'Unknown')
                                 with st.expander(f"⚠️ {player_name}"):
-                                    for issue in result['validation_issues']:
-                                        st.warning(f"• {issue}")
+                                    for warning in result['validation_warnings']:
+                                        st.warning(f"• {warning}")
                         else:
                             st.success("警告はありません")
                     
