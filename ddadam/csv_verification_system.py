@@ -477,7 +477,7 @@ class JBAVerificationSystem:
                         jba_date = self.normalize_date_format(member["birth_date"])
                         birth_match = normalized_input_date == jba_date
 
-                        if name_similarity > 0.8 and birth_match:
+                        if name_similarity >= threshold and birth_match:
                             # 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
                                 player_details = self.get_player_details(member["detail_url"])
@@ -488,7 +488,7 @@ class JBAVerificationSystem:
                                 "jba_data": member,
                                 "similarity": name_similarity
                             }
-                        elif name_similarity > 0.8:  # 名前は一致するが生年月日が異なる場合
+                        elif name_similarity >= threshold:  # 名前は一致するが生年月日が異なる場合
                             # 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
                                 player_details = self.get_player_details(member["detail_url"])
@@ -850,7 +850,7 @@ class CSVCorrectionSystem:
         return results, corrections
     
     def create_corrected_csv(self, df, results):
-        """訂正版CSVを作成"""
+        """訂正版CSVを作成（訂正部分を赤字で表示）"""
         corrected_df = df.copy()
         
         # 訂正を適用
@@ -862,7 +862,11 @@ class CSVCorrectionSystem:
                 # 各カラムを更新
                 for col, value in corrected_data.items():
                     if col in corrected_df.columns:
-                        corrected_df.at[index, col] = value
+                        # 元の値と異なる場合のみ訂正
+                        original_value = corrected_df.at[index, col]
+                        if original_value != value:
+                            # 訂正された値を赤字で表示
+                            corrected_df.at[index, col] = f"🔴 {value}"
         
         return corrected_df
 
@@ -1083,9 +1087,13 @@ def main():
                                 with st.expander(f"行 {correction['index'] + 1}: {correction['original'].get('名前', correction['original'].get('氏名', 'Unknown'))}"):
                                     st.write("**訂正前:**")
                                     st.json(correction['original'])
-                                    st.write("**訂正後:**")
+                                    st.write("**訂正後 (JBAデータベースの正しい情報):**")
                                     st.json(correction['corrected'])
-                                    st.write(f"**訂正理由:** {correction['reason']}")
+                                    st.info("🔴 赤字で表示された部分がJBAデータベースで訂正された情報です")
+                                    if 'reason' in correction:
+                                        st.write(f"**訂正理由:** {correction['reason']}")
+                                    else:
+                                        st.write("**訂正理由:** JBAデータベースの正しい情報に基づいて訂正")
                         else:
                             st.info("訂正されたデータはありません")
                     
