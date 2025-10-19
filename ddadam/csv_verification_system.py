@@ -1123,8 +1123,8 @@ class FastCSVCorrectionSystem:
             else:
                 # JBA登録なしの場合は警告なし
                 result['validation_warnings'] = []
-        
-        return result
+            
+            return result
         
         except Exception as e:
             import traceback
