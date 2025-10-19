@@ -994,11 +994,10 @@ class FastCSVCorrectionSystem:
         return teams_data
     
     def _process_single_player(self, row_data):
-        """単一選手を処理（名前統一 + AI検証版）"""
+        """単一選手を処理（訂正必要な場合のみ情報を詰める）"""
         index, row, university_name, threshold = row_data
         
         try:
-            # 選手名を取得
             player_name = None
             name_column = None
             name_columns = ['選手名', '氏名', 'name', 'Name']
@@ -1016,7 +1015,8 @@ class FastCSVCorrectionSystem:
                     'status': 'missing_data',
                     'corrections': {},
                     'jba_data': {},
-                    'validation_warnings': []
+                    'validation_warnings': [],
+                    'has_correction': False  # 訂正なし
                 }
             
             # JBAデータベースと照合
@@ -1031,50 +1031,58 @@ class FastCSVCorrectionSystem:
                 'status': verification_result.get('status', 'error'),
                 'corrections': {},
                 'jba_data': {},
-                'validation_warnings': []
+                'validation_warnings': [],
+                'has_correction': False  # 訂正フラグ
             }
             
-            # 一致または部分一致の場合
             if verification_result.get('status') in ['match', 'partial_match']:
                 jba_data = verification_result.get('jba_data', {})
                 result['jba_data'] = jba_data
                 
-                # ★ 重要：名前をJBA側に統一
+                # 名前が異なる場合のみ訂正
                 if jba_data.get('name') and jba_data['name'] != player_name:
                     result['corrections'][name_column] = jba_data['name']
+                    result['has_correction'] = True
                 
-                # ★ 体重：JBAに記載があれば優先、なければAIでチェック
+                # 体重：JBAにあれば優先、なければAIチェック
                 if jba_data.get('weight') and str(jba_data['weight']).strip():
-                    weight_value = jba_data['weight']
-                    if 'kg' not in str(weight_value):
-                        weight_value = f"{weight_value}kg"
-                    result['corrections']['体重'] = weight_value
+                    weight_value = str(jba_data['weight']).strip()
+                    # 数字だけを抽出
+                    weight_match = re.search(r'(\d+\.?\d*)', weight_value)
+                    if weight_match:
+                        result['corrections']['体重'] = weight_match.group(1)
+                        result['has_correction'] = True
                 else:
-                    # JBAに体重がない場合は、元データの妥当性をAIでチェック
+                    # JBAに体重がない場合、元データの妥当性をAIでチェック
                     if pd.notna(row.get('体重')):
                         weight = row.get('体重')
                         try:
                             weight_value = float(weight)
-                            # AIで妥当性チェック
                             weight_validation = self.validator.gemini_validator.validate_weight_with_ai(weight)
                             if not weight_validation['is_valid']:
                                 result['validation_warnings'].append(weight_validation['reason'])
                         except (ValueError, TypeError):
                             result['validation_warnings'].append(f"体重が数値ではない: {weight}")
                 
-                # その他のJBAデータを追加
-                COLUMN_MAPPING = {
-                    'grade': '学年',
-                    'uniform_number': '背番号',
-                }
+                # 学年：JBAに記載があれば、数字だけを抽出
+                if jba_data.get('grade') and str(jba_data['grade']).strip():
+                    grade_value = str(jba_data['grade']).strip()
+                    # 数字だけを抽出
+                    grade_match = re.search(r'(\d+)', grade_value)
+                    if grade_match:
+                        result['corrections']['学年'] = grade_match.group(1)
+                        result['has_correction'] = True
                 
-                for jba_key, csv_col in COLUMN_MAPPING.items():
-                    if jba_key in jba_data and jba_data[jba_key]:
-                        value = jba_data[jba_key]
-                        if str(value).strip():
-                            result['corrections'][csv_col] = value
+                # 身長：JBAに記載があれば、数字だけを抽出
+                if jba_data.get('height') and str(jba_data['height']).strip():
+                    height_value = str(jba_data['height']).strip()
+                    # 数字だけを抽出
+                    height_match = re.search(r'(\d+\.?\d*)', height_value)
+                    if height_match:
+                        result['corrections']['身長'] = height_match.group(1)
+                        result['has_correction'] = True
             
-            # ★ 新規：元データの異常値をAIで検出
+            # 元データの異常値をAIで検出
             validation_warnings = self._validate_player_data_with_ai(row, result['jba_data'])
             result['validation_warnings'] = validation_warnings
             
@@ -1089,7 +1097,7 @@ class FastCSVCorrectionSystem:
                 'corrections': {},
                 'jba_data': {},
                 'validation_warnings': [f'エラー: {str(e)}'],
-                'error_detail': traceback.format_exc()
+                'has_correction': False
             }
     
     def _validate_player_data_with_ai(self, row, jba_data):
@@ -1186,25 +1194,88 @@ class FastCSVCorrectionSystem:
         return results
     
     def create_corrected_csv(self, df, results):
-        """修正版CSVを作成"""
+        """修正版CSVを作成（元の列順を保持、セル形式を保持）"""
         corrected_df = df.copy()
         
         for result in results:
+            # 訂正がある場合のみ処理
+            if not result.get('has_correction'):
+                continue
+            
             index = result['index']
             corrections = result.get('corrections', {})
             
             if not corrections:
                 continue
             
-            # 各修正項目をCSVに反映
+            # 各修正項目をCSVに反映（列順は変わらない）
             for csv_col, corrected_value in corrections.items():
                 if csv_col not in corrected_df.columns:
-                    corrected_df[csv_col] = None
+                    # 列が存在しない場合はスキップ（追加しない）
+                    continue
                 
                 # 修正値を適用
                 corrected_df.at[index, csv_col] = corrected_value
         
         return corrected_df
+    
+    def create_colored_excel(self, df, results):
+        """色付きExcelファイルを作成（修正箇所は赤、警告は黄色）"""
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font
+        
+        excel_buffer = io.BytesIO()
+        
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='修正済み')
+            
+            ws = writer.sheets['修正済み']
+            
+            # スタイル定義
+            red_fill = PatternFill(start_color='FF0000', end_color='FF0000', fill_type='solid')
+            yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+            white_font = Font(color='FFFFFF', bold=True)
+            black_font = Font(color='000000')
+            
+            columns = list(df.columns)
+            
+            for result in results:
+                row_index = result['index'] + 2
+                
+                # 訂正がある場合：赤色
+                if result.get('has_correction'):
+                    for col_name, corrected_value in result['corrections'].items():
+                        if col_name in columns:
+                            col_index = columns.index(col_name) + 1
+                            cell = ws.cell(row=row_index, column=col_index)
+                            cell.fill = red_fill
+                            cell.font = white_font
+                
+                # 警告がある場合：黄色
+                if result.get('validation_warnings'):
+                    for warning in result['validation_warnings']:
+                        if '体重' in warning and '体重' in columns:
+                            col_index = columns.index('体重') + 1
+                            cell = ws.cell(row=row_index, column=col_index)
+                            cell.fill = yellow_fill
+                            cell.font = black_font
+                        elif '身長' in warning and '身長' in columns:
+                            col_index = columns.index('身長') + 1
+                            cell = ws.cell(row=row_index, column=col_index)
+                            cell.fill = yellow_fill
+                            cell.font = black_font
+                        elif '出身校' in warning and '出身校' in columns:
+                            col_index = columns.index('出身校') + 1
+                            cell = ws.cell(row=row_index, column=col_index)
+                            cell.fill = yellow_fill
+                            cell.font = black_font
+            
+            # 列幅自動調整
+            for col_idx, col_name in enumerate(columns, 1):
+                ws.column_dimensions[chr(64 + col_idx)].width = 15
+        
+        excel_buffer.seek(0)
+        return excel_buffer
 
 class CSVCorrectionSystem:
     """CSV自動訂正システム（従来版）"""
@@ -1488,6 +1559,12 @@ def main():
                 st.error("❌ CSVファイルの文字エンコーディングが判別できませんでした。ファイルをUTF-8で保存し直してください。")
                 st.stop()
             
+            # 背番号関連の列を削除
+            columns_to_drop = [col for col in df.columns if '背番号' in col or 'uniform' in col.lower()]
+            if columns_to_drop:
+                st.info(f"🔧 背番号関連の列を削除します: {columns_to_drop}")
+                df = df.drop(columns=columns_to_drop)
+            
             # capカラムを除外（無視）
             if 'cap' in df.columns:
                 st.info("📝 「cap」カラムは無視します")
@@ -1538,82 +1615,77 @@ def main():
                     # 結果表示
                     st.subheader("📊 処理結果")
                     
-                    # 統計情報
+                    # 訂正ありの件数をカウント
                     total_records = len(results)
                     matched_count = sum(1 for r in results if r['status'] == 'match')
                     partial_match_count = sum(1 for r in results if r['status'] == 'partial_match')
-                    corrected_count = len(corrections)
+                    has_correction_count = sum(1 for r in results if r.get('has_correction', False))
+                    warnings_count = sum(len(r.get('validation_warnings', [])) for r in results)
                     not_found_count = sum(1 for r in results if r['status'] == 'not_found')
-                    validation_issues_count = sum(1 for r in results if 'validation_issues' in r)
-                    school_correction_count = sum(1 for r in results if 'school_correction' in r)
                     
-                    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+                    col1, col2, col3, col4, col5, col6 = st.columns(6)
                     with col1:
-                        st.metric("総件数", total_records)
+                        st.metric("全件数", total_records)
                     with col2:
-                        st.metric("完全一致", matched_count)
+                        st.metric("JBA一致", matched_count)
                     with col3:
-                        st.metric("部分一致", partial_match_count, help="類似度0.6以上1.0未満の候補")
+                        st.metric("部分一致", partial_match_count)
                     with col4:
-                        st.metric("訂正件数", corrected_count)
+                        st.metric("訂正あり", has_correction_count)  # 実際に訂正があった件数
                     with col5:
-                        st.metric("未発見", not_found_count)
+                        st.metric("⚠️ 警告", warnings_count)
                     with col6:
-                        st.metric("⚠️ 異常値", validation_issues_count, help="体重・出身校に異常値が検出された件数（AI検証）")
-                    with col7:
-                        st.metric("🏫 出身校訂正", school_correction_count, help="出身校名が自動訂正された件数（AI検証）")
+                        st.metric("未発見", not_found_count)
                     
                     # 訂正版CSVを作成
                     corrected_df = st.session_state.csv_system.create_corrected_csv(df, results)
                     
-                    # 訂正版CSVをダウンロード（文字化け対策）
-                    csv_buffer = io.StringIO()
-                    corrected_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
-                    csv_data = csv_buffer.getvalue()
+                    # 色付きExcelを作成
+                    excel_buffer = st.session_state.csv_system.create_colored_excel(corrected_df, results)
                     
+                    # ダウンロードボタン
                     st.download_button(
-                        label="📥 訂正版CSVをダウンロード",
-                        data=csv_data.encode('utf-8-sig'),
-                        file_name=f"corrected_{uploaded_file.name}",
-                        mime="text/csv"
+                        label="📊 修正版Excel（色付け）をダウンロード",
+                        data=excel_buffer.getvalue(),
+                        file_name=f"corrected_{uploaded_file.name.replace('.csv', '.xlsx')}",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                     
                     # 詳細結果表示
                     st.subheader("📋 詳細結果")
                     
                     # タブで結果を分ける
-                    tab1, tab2, tab3, tab4 = st.tabs(["完全一致", "訂正箇所", "未発見", "⚠️ 警告"])
+                    tab1, tab2, tab3, tab4 = st.tabs(["訂正ありのみ", "警告一覧", "未発見", "全詳細"])
                     
                     with tab1:
-                        matched_results = [r for r in results if r['status'] == 'match']
-                        if matched_results:
-                            st.write(f"**完全一致: {len(matched_results)}件**")
-                            for result in matched_results:
-                                with st.expander(f"行 {result['index'] + 1}: {result['original_data'].get('名前', result['original_data'].get('氏名', 'Unknown'))}"):
-                                    st.write("**元データ:**")
-                                    st.json(result['original_data'])
-                                    st.write("**照合結果:**")
-                                    st.json(result['verification_result'])
+                        # 訂正ありの行のみを表示
+                        correction_results = [r for r in results if r.get('has_correction', False)]
+                        if correction_results:
+                            st.write(f"**訂正あり: {len(correction_results)}件**")
+                            for result in correction_results:
+                                player_name = result['original_data'].get('選手名', 'Unknown')
+                                with st.expander(f"🔧 {player_name} (行{result['index']+1})"):
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        st.write("**修正前:**")
+                                        st.json(result['original_data'])
+                                    with col2:
+                                        st.write("**修正内容:**")
+                                        st.json(result['corrections'])
                         else:
-                            st.info("完全一致したデータはありません")
+                            st.info("訂正ありのデータはありません")
                     
                     with tab2:
-                        partial_results = [r for r in results if r['status'] in ['match', 'partial_match'] and r.get('corrections')]
-                        if partial_results:
-                            st.write(f"**訂正箇所: {len(partial_results)}件**")
-                            for result in partial_results:
+                        warning_results = [r for r in results if r.get('validation_warnings')]
+                        if warning_results:
+                            st.write(f"**警告: {len(warning_results)}件**")
+                            for result in warning_results:
                                 player_name = result['original_data'].get('選手名', 'Unknown')
-                                with st.expander(f"🔄 {player_name}"):
-                                    st.write("**元データ:**")
-                                    st.json(result['original_data'])
-                                    st.write("**JBAデータ:**")
-                                    st.json(result['verification_result'].get('jba_data', {}))
-                                    st.write("**訂正後:**")
-                                    corrected_data = result['original_data'].copy()
-                                    corrected_data.update(result['corrections'])
-                                    st.json(corrected_data)
+                                with st.expander(f"⚠️ {player_name}"):
+                                    for warning in result['validation_warnings']:
+                                        st.warning(warning)
                         else:
-                            st.info("訂正箇所はありません")
+                            st.success("警告はありません")
                      
                     with tab3:
                         not_found_results = [r for r in results if r['status'] == 'not_found']
@@ -1626,16 +1698,25 @@ def main():
                             st.success("全て発見されました")
                     
                     with tab4:
-                        warning_results = [r for r in results if r.get('validation_warnings')]
-                        if warning_results:
-                            st.write(f"**警告: {len(warning_results)}件**")
-                            for result in warning_results:
-                                player_name = result['original_data'].get('選手名', 'Unknown')
-                                with st.expander(f"⚠️ {player_name}"):
+                        st.write(f"**全詳細情報**")
+                        for i, result in enumerate(results):
+                            player_name = result['original_data'].get('選手名', 'Unknown')
+                            status_emoji = {
+                                'match': '✅',
+                                'partial_match': '🔶',
+                                'not_found': '❌',
+                                'missing_data': '⚠️'
+                            }.get(result['status'], '❓')
+                            
+                            with st.expander(f"{status_emoji} {i+1}. {player_name}"):
+                                st.write(f"状態: {result['status']}")
+                                if result.get('has_correction'):
+                                    st.write("修正内容:")
+                                    st.json(result['corrections'])
+                                if result.get('validation_warnings'):
+                                    st.write("警告:")
                                     for warning in result['validation_warnings']:
-                                        st.warning(f"• {warning}")
-                        else:
-                            st.success("警告はありません")
+                                        st.warning(warning)
                     
         
         except Exception as e:
