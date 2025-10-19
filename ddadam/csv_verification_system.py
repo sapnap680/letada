@@ -1445,7 +1445,7 @@ def main():
                     # CSV処理実行
                     if use_parallel_processing:
                         results = st.session_state.csv_system.process_csv_file_parallel(
-                            df, university_name, threshold, get_details
+                            df, university_name, threshold
                         )
                         corrections = []  # 並列処理版では corrections は別途処理
                     else:
