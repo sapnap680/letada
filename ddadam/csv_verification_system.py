@@ -16,6 +16,9 @@ from difflib import SequenceMatcher
 import io
 import google.generativeai as genai
 import os
+import concurrent.futures
+import time
+import threading
 
 # ページ設定
 st.set_page_config(
@@ -224,6 +227,73 @@ class JBAVerificationSystem:
             st.error(f"❌ チーム検索エラー: {str(e)}")
             return []
     
+    def _search_teams_by_university_silent(self, university_name):
+        """大学名でチームを検索（静かな実行版 - st.*出力なし）"""
+        try:
+            if not self.logged_in:
+                return []
+            
+            current_year = self.get_current_fiscal_year()
+            
+            # 大学名の正規化（柔軟な照合のため）
+            normalized_university = self.normalize_university_name(university_name)
+            
+            # 正規化された大学名で検索
+            search_university = normalized_university
+            
+            # 検索ページにアクセスしてCSRFトークンを取得
+            search_url = "https://team-jba.jp/organization/15250600/team/search"
+            search_page = self.session.get(search_url)
+            
+            if search_page.status_code != 200:
+                return []
+            
+            soup = BeautifulSoup(search_page.content, 'html.parser')
+            csrf_token = soup.find('input', {'name': '_token'})
+            
+            if not csrf_token:
+                return []
+            
+            # 検索フォームのデータを準備
+            search_data = {
+                '_token': csrf_token['value'],
+                'university': search_university,
+                'year': current_year,
+                'gender': 'male'  # 男子チームのみ
+            }
+            
+            # 検索実行
+            search_result = self.session.post(search_url, data=search_data)
+            
+            if search_result.status_code != 200:
+                return []
+            
+            # 検索結果を解析
+            result_soup = BeautifulSoup(search_result.content, 'html.parser')
+            team_links = result_soup.find_all('a', href=re.compile(r'/team/\d+'))
+            
+            teams = []
+            for link in team_links:
+                team_url = link['href']
+                if not team_url.startswith('http'):
+                    team_url = f"https://team-jba.jp{team_url}"
+                
+                team_name = link.get_text(strip=True)
+                team_id = re.search(r'/team/(\d+)', team_url)
+                team_id = team_id.group(1) if team_id else None
+                
+                if team_id and team_name:
+                    teams.append({
+                        'id': team_id,
+                        'name': team_name,
+                        'url': team_url
+                    })
+            
+            return teams
+            
+        except Exception as e:
+            return []
+
     def get_team_members(self, team_url):
         """チームのメンバー情報を取得（男子チームのみ）"""
         try:
@@ -305,6 +375,86 @@ class JBAVerificationSystem:
             import traceback
             st.write(f"**エラー詳細**: {traceback.format_exc()}")
             return {"team_name": "Error", "team_url": team_url, "members": []}
+    
+    def _get_team_members_silent(self, team_url):
+        """チームのメンバー情報を取得（静かな実行版 - st.*出力なし）"""
+        try:
+            # チーム詳細ページにアクセス
+            team_page = self.session.get(team_url)
+            
+            if team_page.status_code != 200:
+                return {"team_name": "Error", "members": []}
+            
+            soup = BeautifulSoup(team_page.content, 'html.parser')
+            
+            # チーム名を取得
+            team_name = "Unknown Team"
+            title_element = soup.find('title')
+            if title_element:
+                team_name = title_element.get_text(strip=True)
+            
+            # メンバー情報を取得
+            members = []
+            
+            # 選手一覧のテーブルを探す
+            member_tables = soup.find_all('table', class_='table')
+            
+            for table in member_tables:
+                rows = table.find_all('tr')
+                
+                for row in rows[1:]:  # ヘッダー行をスキップ
+                    cells = row.find_all(['td', 'th'])
+                    
+                    if len(cells) >= 3:  # 最低限の情報がある行のみ処理
+                        # 選手名のリンクを探す
+                        name_link = row.find('a', href=re.compile(r'/player/\d+'))
+                        
+                        if name_link:
+                            player_name = name_link.get_text(strip=True)
+                            detail_url = name_link['href']
+                            
+                            if not detail_url.startswith('http'):
+                                detail_url = f"https://team-jba.jp{detail_url}"
+                            
+                            # その他の情報を取得
+                            position = ""
+                            grade = ""
+                            height = ""
+                            weight = ""
+                            
+                            for i, cell in enumerate(cells):
+                                cell_text = cell.get_text(strip=True)
+                                
+                                # ポジション（通常は2番目のカラム）
+                                if i == 1 and cell_text and cell_text not in ['選手名', '氏名']:
+                                    position = cell_text
+                                
+                                # 学年（通常は3番目のカラム）
+                                elif i == 2 and cell_text and cell_text not in ['学年', '年']:
+                                    grade = cell_text
+                                
+                                # 身長・体重の情報を探す
+                                if 'cm' in cell_text:
+                                    height = cell_text
+                                elif 'kg' in cell_text:
+                                    weight = cell_text
+                            
+                            members.append({
+                                "name": player_name,
+                                "position": position,
+                                "grade": grade,
+                                "height": height,
+                                "weight": weight,
+                                "detail_url": detail_url
+                            })
+            
+            return {
+                "team_name": team_name,
+                "members": members
+            }
+            
+        except Exception as e:
+            return {"team_name": "Error", "members": []}
     
     def get_player_details(self, detail_url):
         """選手詳細ページから身長・体重などの詳細情報を取得"""
@@ -408,32 +558,6 @@ class JBAVerificationSystem:
             st.warning(f"⚠️ 選手詳細取得エラー: {str(e)}")
             return {}
     
-    def normalize_date_format(self, date_str):
-        """日付フォーマットを統一（JBAの「2004年5月31日」形式に対応）"""
-        try:
-            if not date_str:
-                return ""
-
-            # JBAの「2004年5月31日」形式を処理
-            if "年" in date_str and "月" in date_str and "日" in date_str:
-                # 「2004年5月31日」→「2004/5/31」に変換
-                import re
-                match = re.match(r'(\d{4})年(\d{1,2})月(\d{1,2})日', date_str)
-                if match:
-                    year, month, day = match.groups()
-                    return f"{year}/{int(month)}/{int(day)}"
-
-            # 既に統一された形式の場合はそのまま返す
-            if "/" in date_str and len(date_str.split("/")) == 3:
-                parts = date_str.split("/")
-                year = parts[0]
-                month = str(int(parts[1]))  # 先頭の0を削除
-                day = str(int(parts[2]))    # 先頭の0を削除
-                return f"{year}/{month}/{day}"
-
-            return date_str
-        except:
-            return date_str
 
     def normalize_name(self, name):
         """名前の正規化"""
@@ -472,11 +596,40 @@ class JBAVerificationSystem:
         basic_similarity = SequenceMatcher(None, norm_name1, norm_name2).ratio()
         
         return basic_similarity
+    
+    def show_name_differences(self, name1, name2):
+        """名前の微妙な違いを視覚的に表示"""
+        if not name1 or not name2:
+            return ""
+        
+        # 正規化
+        norm_name1 = self.normalize_name(name1)
+        norm_name2 = self.normalize_name(name2)
+        
+        if norm_name1 == norm_name2:
+            return "✅ 完全一致"
+        
+        # 文字単位での差分を表示
+        matcher = SequenceMatcher(None, norm_name1, norm_name2)
+        differences = []
+        
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                differences.append(norm_name1[i1:i2])
+            elif tag == 'delete':
+                differences.append(f"❌{norm_name1[i1:i2]}❌")
+            elif tag == 'insert':
+                differences.append(f"➕{norm_name2[j1:j2]}➕")
+            elif tag == 'replace':
+                differences.append(f"🔄{norm_name1[i1:i2]}→{norm_name2[j1:j2]}🔄")
+        
+        result = "".join(differences)
+        return f"🔍 差分: {result}"
 
     def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0):
         """個別選手情報の照合（男子チームのみ）"""
         try:
-            st.write(f"🔍 選手照合: {player_name}, 大学: {university}, 閾値: {threshold}")
+            st.write(f"🔍 選手照合: {player_name}, 大学: {university}")
             
             # 大学名の検索バリエーションを生成
             search_variations = self.get_search_variations(university)
@@ -500,9 +653,6 @@ class JBAVerificationSystem:
                 st.warning(f"❌ {university}の男子チームが見つかりませんでした")
                 return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
-            # 正規化された入力日付
-            normalized_input_date = self.normalize_date_format(birth_date) if birth_date else None
-
             # 各チームのメンバー情報を取得して照合
             for team in teams:
                 st.write(f"🔍 チーム: {team['name']} のメンバーを取得中...")
@@ -521,50 +671,64 @@ class JBAVerificationSystem:
                         st.write(f"  - JBA選手: {member['name']}")
                         st.write(f"  - 名前類似度: {name_similarity:.3f}")
                         
-                        # 生年月日の照合
-                        if normalized_input_date and birth_date:
-                            jba_date = self.normalize_date_format(member["birth_date"])
-                            birth_match = normalized_input_date == jba_date
-                            st.write(f"  - 入力日付: {normalized_input_date}, JBA日付: {jba_date}, 一致: {birth_match}")
-                        else:
-                            birth_match = True  # 生年月日が入力されていない場合はスキップ
-                            st.write(f"  - 生年月日チェック: スキップ")
+                        # 微妙な違いを表示（0.6以上の候補のみ）
+                        if name_similarity >= 0.6:
+                            diff_info = self.show_name_differences(player_name, member["name"])
+                            st.write(f"  - {diff_info}")
 
-                        # 閾値1.0以上かつ生年月日一致で完全一致
-                        if name_similarity >= threshold and birth_match:
-                            st.success(f"✅ 完全一致: {member['name']}")
+                        # 第1段階: 0.6の閾値で候補を探す
+                        if name_similarity >= 0.6:
+                            st.info(f"🔍 候補発見: {member['name']} (類似度: {name_similarity:.3f})")
                             
-                            # 詳細情報を取得する場合
-                            if get_details and member.get("detail_url"):
-                                player_details = self.get_player_details(member["detail_url"])
-                                member.update(player_details)
+                            # 第2段階: 1.0の閾値で完全一致を確認
+                            if name_similarity >= 1.0:
+                                st.success(f"✅ 完全一致: {member['name']}")
+                                
+                                # 詳細情報を取得する場合
+                                if get_details and member.get("detail_url"):
+                                    player_details = self.get_player_details(member["detail_url"])
+                                    member.update(player_details)
+                                
+                                return {
+                                    "status": "match",
+                                    "jba_data": member,
+                                    "similarity": name_similarity
+                                }
                             
-                            return {
-                                "status": "match",
-                                "jba_data": member,
-                                "similarity": name_similarity
-                            }
-                        
-                        # 名前は一致するが生年月日が異なる場合（後で返す用に保存）
-                        elif name_similarity >= threshold and not birth_match and birth_date:
-                            st.warning(f"⚠️ 名前一致（類似度: {name_similarity:.3f}）だが生年月日相違")
-                            
-                            if get_details and member.get("detail_url"):
-                                player_details = self.get_player_details(member["detail_url"])
-                                member.update(player_details)
-                            
-                            all_matched_members.append({
-                                "status": "name_match_birth_mismatch",
-                                "jba_data": member,
-                                "similarity": name_similarity,
-                                "message": f"名前は一致しますが、生年月日が異なります。JBA登録: {member['birth_date']}"
-                            })
+                            # 0.6以上1.0未満の候補も保存（最終的に返す可能性）
+                            elif name_similarity >= 0.6 and name_similarity < 1.0:
+                                st.info(f"📝 候補保存: {member['name']} (類似度: {name_similarity:.3f})")
+                                
+                                if get_details and member.get("detail_url"):
+                                    player_details = self.get_player_details(member["detail_url"])
+                                    member.update(player_details)
+                                
+                                all_matched_members.append({
+                                    "status": "partial_match",
+                                    "jba_data": member,
+                                    "similarity": name_similarity,
+                                    "message": f"部分一致: {member['name']} (類似度: {name_similarity:.3f})"
+                                })
                 else:
                     st.warning(f"❌ チーム {team['name']} のメンバー情報が取得できませんでした")
 
-            # 名前一致で生年月日不一致のものがあれば返す
+            # 完全一致を優先し、なければ部分一致を返す
             if all_matched_members:
-                return all_matched_members[0]  # 最初のマッチを返す
+                # 完全一致（類似度1.0）を優先
+                exact_matches = [m for m in all_matched_members if m["similarity"] >= 1.0]
+                if exact_matches:
+                    st.info(f"🎯 完全一致候補: {len(exact_matches)}件")
+                    return exact_matches[0]  # 最初の完全一致を返す
+                
+                # 部分一致（類似度0.6以上1.0未満）を返す
+                partial_matches = [m for m in all_matched_members if m["similarity"] >= 0.6 and m["similarity"] < 1.0]
+                if partial_matches:
+                    st.info(f"📝 部分一致候補: {len(partial_matches)}件")
+                    return partial_matches[0]  # 最初の部分一致を返す
+                
+                # その他の候補
+                st.info(f"🔍 その他候補: {len(all_matched_members)}件")
+                return all_matched_members[0]
 
             return {"status": "not_found", "message": "JBAデータベースに該当する選手が見つかりませんでした"}
 
@@ -747,8 +911,291 @@ class DataValidator:
         
         return len(all_issues) == 0, all_issues, corrections
 
+class FastCSVCorrectionSystem:
+    """並列処理とキャッシング対応のCSV訂正システム"""
+    
+    def __init__(self, jba_system, gemini_api_key=None, max_workers=5):
+        self.jba_system = jba_system
+        self.validator = DataValidator(gemini_api_key)
+        self.max_workers = max_workers
+        
+        # キャッシング機構
+        self.teams_cache = {}  # 大学ごとのチーム一覧
+        self.team_members_cache = {}  # チームメンバー一覧
+        self.player_details_cache = {}  # 選手詳細情報
+        self.lock = threading.Lock()
+        
+        # 前処理用：大学全体のチーム・メンバー情報
+        self.university_teams_data = {}  # {university_name: {team_id: {members: [...]}}}
+    
+    def _preload_university_data(self, university_name):
+        """大学のチーム情報を事前に全て取得（1回だけ実行）"""
+        if university_name in self.university_teams_data:
+            return self.university_teams_data[university_name]
+        
+        # チーム検索（検索バリエーション対応）- 静かな実行
+        search_variations = self.jba_system.get_search_variations(university_name)
+        teams = []
+        
+        for variation in search_variations:
+            teams = self.jba_system._search_teams_by_university_silent(variation)
+            if teams:
+                break
+        
+        if not teams:
+            with self.lock:
+                self.university_teams_data[university_name] = None
+            return None
+        
+        # 各チームのメンバーを取得 - 静かな実行
+        teams_data = {}
+        
+        for team in teams:
+            team_id = team['id']
+            team_url = team['url']
+            
+            # 既にキャッシュにあれば使用
+            if team_url in self.team_members_cache:
+                team_data = self.team_members_cache[team_url]
+            else:
+                team_data = self.jba_system._get_team_members_silent(team_url)
+                with self.lock:
+                    self.team_members_cache[team_url] = team_data
+            
+            teams_data[team_id] = {
+                'team_name': team['name'],
+                'team_url': team_url,
+                'members': team_data.get('members', [])
+            }
+        
+        with self.lock:
+            self.university_teams_data[university_name] = teams_data
+        
+        return teams_data
+    
+    def _process_single_player(self, row_data):
+        """単一の選手を処理（スレッドで並列実行）"""
+        index, row, university_name, threshold, get_details, university_teams_data = row_data
+        
+        try:
+            player_name = None
+            name_columns = ['選手名', '氏名', 'name', 'Name']
+            
+            for col in name_columns:
+                if col in row.index and pd.notna(row[col]):
+                    player_name = str(row[col]).strip()
+                    break
+            
+            if not player_name:
+                return {
+                    'index': index,
+                    'original_data': row.to_dict(),
+                    'status': 'missing_data',
+                    'message': '選手名が取得できませんでした',
+                    'correction': None
+                }
+            
+            # 事前取得したチームデータから検索
+            if not university_teams_data:
+                return {
+                    'index': index,
+                    'original_data': row.to_dict(),
+                    'status': 'not_found',
+                    'message': f'{university_name}のチームデータが見つかりません',
+                    'correction': None
+                }
+            
+            # 大学内の全メンバーから候補を探す
+            all_matched_members = []
+            
+            for team_id, team_info in university_teams_data.items():
+                members = team_info.get('members', [])
+                
+                for member in members:
+                    # 名前の類似度を計算
+                    name_similarity = self.jba_system.calculate_similarity(player_name, member['name'])
+                    
+                    # 0.6以上の候補を保存
+                    if name_similarity >= 0.6:
+                        # 詳細情報を取得（必要に応じて）
+                        if get_details and member.get('detail_url'):
+                            if member['detail_url'] not in self.player_details_cache:
+                                player_details = self.jba_system.get_player_details(member['detail_url'])
+                                with self.lock:
+                                    self.player_details_cache[member['detail_url']] = player_details
+                            else:
+                                player_details = self.player_details_cache[member['detail_url']]
+                            
+                            member_with_details = member.copy()
+                            member_with_details.update(player_details)
+                        else:
+                            member_with_details = member
+                        
+                        all_matched_members.append({
+                            'similarity': name_similarity,
+                            'member': member_with_details,
+                            'team_name': team_info['team_name']
+                        })
+            
+            # マッチ結果を類似度でソート（降順）
+            all_matched_members.sort(key=lambda x: x['similarity'], reverse=True)
+            
+            result = {
+                'index': index,
+                'original_data': row.to_dict(),
+                'status': 'not_found',
+                'message': 'マッチが見つかりませんでした',
+                'correction': None
+            }
+            
+            if all_matched_members:
+                best_match = all_matched_members[0]
+                best_similarity = best_match['similarity']
+                best_member = best_match['member']
+                
+                # 1.0（完全一致）
+                if best_similarity >= 1.0:
+                    result['status'] = 'match'
+                    result['message'] = 'JBAデータベースと完全一致'
+                    
+                    # 詳細情報を追加
+                    if get_details:
+                        is_valid, validation_issues, school_corrections = self.validator.validate_player_data(best_member)
+                        corrected_data = row.to_dict().copy()
+                        
+                        if 'height' in best_member and best_member['height']:
+                            corrected_data['身長'] = f"{best_member['height']}cm"
+                        if 'weight' in best_member and best_member['weight']:
+                            corrected_data['体重'] = f"{best_member['weight']}kg"
+                        if 'position' in best_member and best_member['position']:
+                            corrected_data['ポジション'] = best_member['position']
+                        if 'school' in best_member and best_member['school']:
+                            corrected_data['出身校'] = school_corrections.get('school', best_member['school'])
+                        if 'grade' in best_member and best_member['grade']:
+                            corrected_data['学年'] = best_member['grade']
+                        if 'uniform_number' in best_member and best_member['uniform_number']:
+                            corrected_data['背番号'] = best_member['uniform_number']
+                        
+                        result['correction'] = corrected_data
+                        
+                        if not is_valid:
+                            result['validation_issues'] = validation_issues
+                            result['message'] = f"JBAデータベースと完全一致（異常値検出: {', '.join(validation_issues)}）"
+                    
+                    result['jba_data'] = best_member
+                
+                # 0.6-1.0（部分一致）
+                elif best_similarity >= 0.6:
+                    result['status'] = 'partial_match'
+                    result['message'] = f"部分一致: {best_member['name']} (類似度: {best_similarity:.3f}) - 手動確認推奨"
+                    
+                    if get_details:
+                        corrected_data = row.to_dict().copy()
+                        
+                        if 'height' in best_member and best_member['height']:
+                            corrected_data['身長'] = f"{best_member['height']}cm"
+                        if 'weight' in best_member and best_member['weight']:
+                            corrected_data['体重'] = f"{best_member['weight']}kg"
+                        if 'position' in best_member and best_member['position']:
+                            corrected_data['ポジション'] = best_member['position']
+                        if 'school' in best_member and best_member['school']:
+                            corrected_data['出身校'] = best_member['school']
+                        if 'grade' in best_member and best_member['grade']:
+                            corrected_data['学年'] = best_member['grade']
+                        if 'uniform_number' in best_member and best_member['uniform_number']:
+                            corrected_data['背番号'] = best_member['uniform_number']
+                        
+                        result['correction'] = corrected_data
+                    
+                    result['jba_data'] = best_member
+                    result['similarity'] = best_similarity
+            
+            return result
+        
+        except Exception as e:
+            import traceback
+            return {
+                'index': index,
+                'original_data': row.to_dict(),
+                'status': 'error',
+                'message': f'エラー: {str(e)}',
+                'correction': None,
+                'error_detail': traceback.format_exc()
+            }
+    
+    def process_csv_file_parallel(self, df, university_name, threshold=0.8, get_details=False):
+        """CSVファイルを並列処理で高速に処理"""
+        
+        # ステップ1: 大学データを事前取得（1回だけ）
+        st.info(f"📚 ステップ1: 大学データを事前取得中...")
+        university_teams_data = self._preload_university_data(university_name)
+        
+        if not university_teams_data:
+            st.error(f"❌ {university_name}のチームデータが取得できません")
+            return []
+        
+        # ステップ2: 選手情報を並列処理
+        st.info(f"🚀 ステップ2: {self.max_workers}スレッドで選手情報を処理中...")
+        
+        # 処理用のデータを準備（大学データを各スレッドに渡す）
+        process_data = [
+            (index, row, university_name, threshold, get_details, university_teams_data)
+            for index, row in df.iterrows()
+        ]
+        
+        results = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        start_time = time.time()
+        
+        # ThreadPoolExecutorで並列処理
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {executor.submit(self._process_single_player, data): data[0] for data in process_data}
+            
+            completed = 0
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                results.append(result)
+                
+                completed += 1
+                progress = completed / len(futures)
+                progress_bar.progress(progress)
+                
+                player_name = result['original_data'].get('選手名', result['original_data'].get('氏名', 'Unknown'))
+                status_text.text(f"処理中: {completed}/{len(futures)} - {player_name}")
+        
+        elapsed_time = time.time() - start_time
+        
+        progress_bar.progress(1.0)
+        status_text.text(f"✅ 処理完了 ({elapsed_time:.2f}秒)")
+        st.success(f"✅ {len(df)}行を{elapsed_time:.2f}秒で処理しました (平均: {elapsed_time/len(df):.2f}秒/行)")
+        
+        # 元のインデックス順にソート
+        results.sort(key=lambda x: x['index'])
+        
+        return results
+    
+    def create_corrected_csv(self, df, results):
+        """訂正版CSVを作成（訂正部分を赤字で表示）"""
+        corrected_df = df.copy()
+        
+        for result in results:
+            if result['correction']:
+                index = result['index']
+                corrected_data = result['correction']
+                
+                for col, value in corrected_data.items():
+                    if col in corrected_df.columns:
+                        original_value = corrected_df.at[index, col]
+                        # 元の値と異なる場合のみ訂正を適用
+                        if original_value != value:
+                            corrected_df.at[index, col] = f"🔴 {value}"
+        
+        return corrected_df
+
 class CSVCorrectionSystem:
-    """CSV自動訂正システム"""
+    """CSV自動訂正システム（従来版）"""
     
     def __init__(self, jba_system, gemini_api_key=None):
         self.jba_system = jba_system
@@ -759,28 +1206,22 @@ class CSVCorrectionSystem:
         st.info(f"📊 CSVファイルを処理中... ({len(df)}行)")
         st.write(f"🔍 処理開始: 大学名={university_name}, 閾値={threshold}, 詳細取得={get_details}")
         
-        # 結果を保存するためのリスト
         results = []
         corrections = []
         
-        # プログレスバー
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         for index, row in df.iterrows():
-            # プログレス更新
             progress = (index + 1) / len(df)
             progress_bar.progress(progress)
-            status_text.text(f"処理中: {index + 1}/{len(df)} - {row.get('名前', row.get('氏名', 'Unknown'))}")
+            status_text.text(f"処理中: {index + 1}/{len(df)} - {row.get('選手名', row.get('氏名', 'Unknown'))}")
             
-            # デバッグ情報を表示
             st.write(f"🔍 行 {index + 1} を処理中...")
             
-            # 選手名のみを取得（生年月日は不要）
+            # 選手名のみを取得
             player_name = None
-            
-            # 様々なカラム名に対応
-            name_columns = ['名前', '氏名', '選手名', 'name', 'Name']
+            name_columns = ['選手名', '氏名', 'name', 'Name']
             
             for col in name_columns:
                 if col in df.columns and pd.notna(row[col]):
@@ -799,12 +1240,11 @@ class CSVCorrectionSystem:
                 })
                 continue
             
-            # JBAデータベースと照合（詳細情報も取得するかどうか）
+            # JBAデータベースとの照合
             verification_result = self.jba_system.verify_player_info(
                 player_name, None, university_name, get_details, threshold
             )
             
-            # 結果を保存
             result = {
                 'index': index,
                 'original_data': row.to_dict(),
@@ -812,18 +1252,15 @@ class CSVCorrectionSystem:
                 'status': verification_result['status']
             }
             
-            # 訂正が必要な場合
+            # 完全一致の場合
             if verification_result['status'] == 'match':
-                # 完全一致の場合、詳細情報があれば追加
                 if get_details and 'jba_data' in verification_result:
                     jba_data = verification_result['jba_data']
-                    
-                    # データ検証と訂正を実行
-                    is_valid, validation_issues, corrections = self.validator.validate_player_data(jba_data)
+                    is_valid, validation_issues, school_corrections = self.validator.validate_player_data(jba_data)
                     
                     corrected_data = row.to_dict().copy()
                     
-                    # 検証を通過した情報のみ追加
+                    # JBA情報を追加
                     if 'height' in jba_data and jba_data['height']:
                         corrected_data['身長'] = f"{jba_data['height']}cm"
                     if 'weight' in jba_data and jba_data['weight']:
@@ -831,10 +1268,9 @@ class CSVCorrectionSystem:
                     if 'position' in jba_data and jba_data['position']:
                         corrected_data['ポジション'] = jba_data['position']
                     if 'school' in jba_data and jba_data['school']:
-                        # 出身校の訂正を適用
-                        if 'school' in corrections:
-                            corrected_data['出身校'] = corrections['school']
-                            result['school_correction'] = f"{jba_data['school']} → {corrections['school']}"
+                        if 'school' in school_corrections:
+                            corrected_data['出身校'] = school_corrections['school']
+                            result['school_correction'] = f"{jba_data['school']} → {school_corrections['school']}"
                         else:
                             corrected_data['出身校'] = jba_data['school']
                     if 'grade' in jba_data and jba_data['grade']:
@@ -842,7 +1278,6 @@ class CSVCorrectionSystem:
                     if 'uniform_number' in jba_data and jba_data['uniform_number']:
                         corrected_data['背番号'] = jba_data['uniform_number']
                     
-                    # 検証結果を記録
                     if not is_valid:
                         result['validation_issues'] = validation_issues
                         result['message'] = f'JBAデータベースと完全一致（詳細情報追加）⚠️ 異常値検出: {", ".join(validation_issues)}'
@@ -853,21 +1288,14 @@ class CSVCorrectionSystem:
                 else:
                     result['correction'] = None
                     result['message'] = 'JBAデータベースと完全一致'
-            elif verification_result['status'] == 'name_match_birth_mismatch':
-                # 名前は一致するが生年月日が異なる場合
+            
+            # 部分一致の場合
+            elif verification_result['status'] == 'partial_match':
                 jba_data = verification_result['jba_data']
-                
-                # データ検証と訂正を実行
-                is_valid, validation_issues, corrections = self.validator.validate_player_data(jba_data)
+                similarity = verification_result.get('similarity', 0.0)
                 
                 corrected_data = row.to_dict().copy()
                 
-                # 生年月日をJBAデータに合わせて訂正
-                corrected_data['生年月日'] = jba_data['birth_date']
-                if '誕生日' in corrected_data:
-                    corrected_data['誕生日'] = jba_data['birth_date']
-                
-                # 詳細情報があれば追加（検証を通過した情報のみ）
                 if get_details:
                     if 'height' in jba_data and jba_data['height']:
                         corrected_data['身長'] = f"{jba_data['height']}cm"
@@ -876,33 +1304,17 @@ class CSVCorrectionSystem:
                     if 'position' in jba_data and jba_data['position']:
                         corrected_data['ポジション'] = jba_data['position']
                     if 'school' in jba_data and jba_data['school']:
-                        # 出身校の訂正を適用
-                        if 'school' in corrections:
-                            corrected_data['出身校'] = corrections['school']
-                            result['school_correction'] = f"{jba_data['school']} → {corrections['school']}"
-                        else:
-                            corrected_data['出身校'] = jba_data['school']
+                        corrected_data['出身校'] = jba_data['school']
                     if 'grade' in jba_data and jba_data['grade']:
                         corrected_data['学年'] = jba_data['grade']
                     if 'uniform_number' in jba_data and jba_data['uniform_number']:
                         corrected_data['背番号'] = jba_data['uniform_number']
                 
-                # 検証結果を記録
-                if not is_valid:
-                    result['validation_issues'] = validation_issues
-                    result['message'] = f"生年月日を訂正: {birth_date} → {jba_data['birth_date']} ⚠️ 異常値検出: {', '.join(validation_issues)}"
-                else:
-                    result['message'] = f"生年月日を訂正: {birth_date} → {jba_data['birth_date']}"
-                
                 result['correction'] = corrected_data
-                corrections.append({
-                    'index': index,
-                    'original': row.to_dict(),
-                    'corrected': corrected_data,
-                    'reason': '生年月日の不一致'
-                })
+                result['message'] = f"部分一致: {jba_data['name']} (類似度: {similarity:.3f}) - 手動確認推奨"
+            
+            # 一致なしの場合
             else:
-                # 照合できない場合
                 result['correction'] = None
                 result['message'] = verification_result.get('message', '照合できませんでした')
             
@@ -1008,6 +1420,8 @@ def main():
         get_details = True  # 常にオン
         gemini_api_key = "AIzaSyBCX-rsrYsGbPCHrlWXdd2ECAxmbTqTJ34"  # 固定
         use_ai_validation = True  # 常にオン
+        use_parallel_processing = True  # 並列処理を使用
+        max_workers = 5  # 並列スレッド数
     
     # システム初期化
     if 'jba_system' not in st.session_state:
@@ -1019,7 +1433,14 @@ def main():
     
     # CSVシステムを毎回更新（APIキーの変更に対応）
     if st.session_state.jba_system is not None:
-        st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, gemini_api_key if use_ai_validation else None)
+        if use_parallel_processing:
+            st.session_state.csv_system = FastCSVCorrectionSystem(
+                st.session_state.jba_system, 
+                gemini_api_key if use_ai_validation else None,
+                max_workers=max_workers
+            )
+        else:
+            st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, gemini_api_key if use_ai_validation else None)
     else:
         st.session_state.csv_system = None
     
@@ -1033,7 +1454,7 @@ def main():
     uploaded_file = st.file_uploader(
         "CSVファイルをアップロード",
         type=['csv'],
-        help="選手名と生年月日が含まれるCSVファイルをアップロードしてください"
+        help="選手名が含まれるCSVファイルをアップロードしてください"
     )
     
     if uploaded_file is not None:
@@ -1087,9 +1508,15 @@ def main():
                     st.dataframe(df.head(3))
                     
                     # CSV処理実行
-                    results, corrections = st.session_state.csv_system.process_csv_file(
-                        df, university_name, threshold, get_details
-                    )
+                    if use_parallel_processing:
+                        results = st.session_state.csv_system.process_csv_file_parallel(
+                            df, university_name, threshold, get_details
+                        )
+                        corrections = []  # 並列処理版では corrections は別途処理
+                    else:
+                        results, corrections = st.session_state.csv_system.process_csv_file(
+                            df, university_name, threshold, get_details
+                        )
                     
                     # 結果表示
                     st.subheader("📊 処理結果")
@@ -1097,23 +1524,26 @@ def main():
                     # 統計情報
                     total_records = len(results)
                     matched_count = sum(1 for r in results if r['status'] == 'match')
+                    partial_match_count = sum(1 for r in results if r['status'] == 'partial_match')
                     corrected_count = len(corrections)
                     not_found_count = sum(1 for r in results if r['status'] == 'not_found')
                     validation_issues_count = sum(1 for r in results if 'validation_issues' in r)
                     school_correction_count = sum(1 for r in results if 'school_correction' in r)
                     
-                    col1, col2, col3, col4, col5, col6 = st.columns(6)
+                    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
                     with col1:
                         st.metric("総件数", total_records)
                     with col2:
                         st.metric("完全一致", matched_count)
                     with col3:
-                        st.metric("訂正件数", corrected_count)
+                        st.metric("部分一致", partial_match_count, help="類似度0.6以上1.0未満の候補")
                     with col4:
-                        st.metric("未発見", not_found_count)
+                        st.metric("訂正件数", corrected_count)
                     with col5:
-                        st.metric("⚠️ 異常値", validation_issues_count, help="体重・出身校に異常値が検出された件数（AI検証）")
+                        st.metric("未発見", not_found_count)
                     with col6:
+                        st.metric("⚠️ 異常値", validation_issues_count, help="体重・出身校に異常値が検出された件数（AI検証）")
+                    with col7:
                         st.metric("🏫 出身校訂正", school_correction_count, help="出身校名が自動訂正された件数（AI検証）")
                     
                     # 訂正版CSVを作成
@@ -1135,7 +1565,7 @@ def main():
                     st.subheader("📋 詳細結果")
                     
                     # タブで結果を分ける
-                    tab1, tab2, tab3, tab4 = st.tabs(["完全一致", "訂正済み", "未発見", "⚠️ 異常値検出"])
+                    tab1, tab2, tab3, tab4, tab5 = st.tabs(["完全一致", "部分一致", "訂正済み", "未発見", "⚠️ 異常値検出"])
                     
                     with tab1:
                         matched_results = [r for r in results if r['status'] == 'match']
@@ -1151,6 +1581,23 @@ def main():
                             st.info("完全一致したデータはありません")
                     
                     with tab2:
+                        partial_match_results = [r for r in results if r['status'] == 'partial_match']
+                        if partial_match_results:
+                            st.write(f"**部分一致: {len(partial_match_results)}件**")
+                            st.warning("⚠️ 以下のデータは類似度0.6以上1.0未満の候補です。手動で確認してください。")
+                            for result in partial_match_results:
+                                with st.expander(f"行 {result['index'] + 1}: {result['original_data'].get('名前', result['original_data'].get('氏名', 'Unknown'))} - 部分一致"):
+                                    st.write("**元データ:**")
+                                    st.json(result['original_data'])
+                                    st.write("**照合結果:**")
+                                    st.json(result['verification_result'])
+                                    if result['correction']:
+                                        st.write("**候補データ（詳細情報追加）:**")
+                                        st.json(result['correction'])
+                        else:
+                            st.info("部分一致のデータはありません")
+                     
+                    with tab3:
                         if corrections:
                             st.write(f"**訂正済み: {len(corrections)}件**")
                             for correction in corrections:
@@ -1167,7 +1614,7 @@ def main():
                         else:
                             st.info("訂正されたデータはありません")
                     
-                    with tab3:
+                    with tab4:
                         not_found_results = [r for r in results if r['status'] == 'not_found']
                         if not_found_results:
                             st.write(f"**未発見: {len(not_found_results)}件**")
@@ -1180,7 +1627,7 @@ def main():
                         else:
                             st.info("未発見のデータはありません")
                     
-                    with tab4:
+                    with tab5:
                         validation_issues_results = [r for r in results if 'validation_issues' in r]
                         school_correction_results = [r for r in results if 'school_correction' in r]
                         
