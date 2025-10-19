@@ -832,6 +832,22 @@ class CSVCorrectionSystem:
 
 def main():
     """メイン関数"""
+    # セッション状態の初期化
+    if 'jba_logged_in' not in st.session_state:
+        st.session_state.jba_logged_in = False
+    if 'jba_system' not in st.session_state:
+        st.session_state.jba_system = None
+    if 'csv_system' not in st.session_state:
+        st.session_state.csv_system = None
+    if 'uploaded_df' not in st.session_state:
+        st.session_state.uploaded_df = None
+    if 'university_name' not in st.session_state:
+        st.session_state.university_name = ""
+    if 'threshold' not in st.session_state:
+        st.session_state.threshold = 0.8
+    if 'get_details' not in st.session_state:
+        st.session_state.get_details = False
+    
     st.title("🏀 CSV自動訂正システム")
     st.markdown("**JBAデータベースと照合してCSVファイルを自動訂正します**")
     
