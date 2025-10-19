@@ -449,6 +449,9 @@ class JBAVerificationSystem:
     def verify_player_info(self, player_name, birth_date, university, get_details=False):
         """個別選手情報の照合（男子チームのみ）"""
         try:
+            # デバッグ情報を表示
+            st.write(f"🔍 選手照合: {player_name}, 生年月日: {birth_date}, 大学: {university}")
+            
             # 大学のチームを検索（柔軟な照合）
             teams = self.search_teams_by_university(university)
 
@@ -460,6 +463,7 @@ class JBAVerificationSystem:
                     teams = self.search_teams_by_university(normalized_university)
                 
                 if not teams:
+                    st.warning(f"❌ {university}の男子チームが見つかりませんでした")
                     return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
             # 入力された生年月日を正規化
@@ -477,7 +481,12 @@ class JBAVerificationSystem:
                         jba_date = self.normalize_date_format(member["birth_date"])
                         birth_match = normalized_input_date == jba_date
 
+                        # デバッグ情報を表示
+                        st.write(f"  - JBA選手: {member['name']}, 生年月日: {member['birth_date']}")
+                        st.write(f"  - 名前類似度: {name_similarity:.3f}, 生年月日一致: {birth_match}")
+                        
                         if name_similarity >= threshold and birth_match:
+                            st.success(f"✅ 完全一致: {member['name']}")
                             # 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
                                 player_details = self.get_player_details(member["detail_url"])
@@ -1015,6 +1024,12 @@ def main():
                     st.write(f"- データ行数: {len(df)}")
                     st.write(f"- カラム名: {list(df.columns)}")
                     st.write(f"- JBAログイン状態: {st.session_state.jba_logged_in}")
+                    st.write(f"- 類似度閾値: {threshold}")
+                    st.write(f"- 詳細情報取得: {get_details}")
+                    
+                    # 最初の数行のデータを表示
+                    st.write("**最初の3行のデータ:**")
+                    st.dataframe(df.head(3))
                     
                     # CSV処理実行
                     results, corrections = st.session_state.csv_system.process_csv_file(
