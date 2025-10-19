@@ -880,6 +880,10 @@ def main():
         
         if st.button("JBAにログイン", type="primary"):
             if email and password:
+                # JBAシステムの初期化
+                if st.session_state.jba_system is None:
+                    st.session_state.jba_system = JBAVerificationSystem()
+                
                 if st.session_state.jba_system.login(email, password):
                     st.session_state.jba_logged_in = True
                     st.success("ログイン成功")
@@ -901,7 +905,7 @@ def main():
         get_details = st.checkbox("詳細情報を取得（身長・体重・ポジション等）", value=False, help="チェックすると、選手詳細ページから身長・体重・ポジション・出身校・学年情報も取得します。処理時間が長くなります。")
         
         st.subheader("🤖 AI検証設定")
-        gemini_api_key = st.text_input("Gemini APIキー", type="password", placeholder="AIzaSy...", help="Google Gemini APIを使用した高度なAI検証を有効にします。")
+        gemini_api_key = st.text_input("Gemini APIキー", type="password", value="AIzaSyBCX-rsrYsGbPCHrlWXdd2ECAxmbTqTJ34", help="Google Gemini APIを使用した高度なAI検証を有効にします。")
         use_ai_validation = st.checkbox("AI検証を使用", value=bool(gemini_api_key), help="Gemini APIを使用した高度なAI検証を有効にします。")
     
     # システム初期化
@@ -913,7 +917,10 @@ def main():
         st.session_state.jba_logged_in = False
     
     # CSVシステムを毎回更新（APIキーの変更に対応）
-    st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, gemini_api_key if use_ai_validation else None)
+    if st.session_state.jba_system is not None:
+        st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, gemini_api_key if use_ai_validation else None)
+    else:
+        st.session_state.csv_system = None
     
     # メインコンテンツ
     st.header("📄 CSVファイル処理")
@@ -959,6 +966,8 @@ def main():
                     st.error("❌ 先にJBAにログインしてください")
                 elif not university_name:
                     st.error("❌ 大学名を入力してください")
+                elif st.session_state.csv_system is None:
+                    st.error("❌ CSVシステムが初期化されていません。JBAにログインしてください。")
                 else:
                     # CSV処理実行
                     results, corrections = st.session_state.csv_system.process_csv_file(
