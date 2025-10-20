@@ -1135,13 +1135,22 @@ class FastCSVCorrectionSystem:
             except (ValueError, TypeError):
                 warnings.append(f"⚠️ 体重が数値ではない: {weight}")
         
-        # 出身校：JBAに記載がない場合のみAIで検証
-        if not jba_data.get('school') and pd.notna(row.get('出身校')):
+        # 出身校：常にAIで検証（JBAには出身校情報が記載されていないため）
+        if pd.notna(row.get('出身校')):
             school = row.get('出身校')
+            print(f"DEBUG: checking school = {school}")
             if school and str(school).strip() != "":
-                school_validation = self.validator.gemini_validator.validate_and_correct_school_with_ai(str(school).strip())
-                if not school_validation['is_valid']:
-                    warnings.append(school_validation['reason'])
+                try:
+                    print(f"DEBUG: calling validate_and_correct_school_with_ai with '{str(school).strip()}'")
+                    school_validation = self.validator.gemini_validator.validate_and_correct_school_with_ai(str(school).strip())
+                    print(f"DEBUG: school_validation = {school_validation}")
+                    if not school_validation['is_valid']:
+                        warnings.append(school_validation['reason'])
+                except Exception as e:
+                    warnings.append(f"⚠️ 出身校の検証エラー: {str(e)}")
+                    print(f"DEBUG: school validation exception: {e}")
+        else:
+            print(f"DEBUG: skipping school validation - csv_school={row.get('出身校')}")
         
         # 身長はJBAに必ず記載されているのでAI検証不要
         
