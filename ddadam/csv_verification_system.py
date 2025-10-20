@@ -1098,8 +1098,7 @@ class FastCSVCorrectionSystem:
                             pass
                 
                 # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
-                # 体重、出身校のいずれかがJBAにない場合はAI検証を実行
-                if not jba_data.get('weight') or not jba_data.get('school'):
+                if not jba_data.get('weight') and not jba_data.get('height'):
                     validation_warnings = self._validate_player_data_with_ai(row, jba_data)
                     result['validation_warnings'] = validation_warnings
             else:
@@ -1125,46 +1124,27 @@ class FastCSVCorrectionSystem:
         """元データの異常値をAIで検出（JBAに記載がない場合のみ）"""
         warnings = []
         
-        print(f"DEBUG: _validate_player_data_with_ai called with jba_data = {jba_data}")
-        
         # 体重：JBAに記載がない場合のみAIで検証
         if not jba_data.get('weight') and pd.notna(row.get('体重')):
             weight = row.get('体重')
-            print(f"DEBUG: checking weight = {weight}")
             try:
                 weight_value = float(weight)
-                print(f"DEBUG: calling validate_weight_with_ai with {weight_value}")
                 weight_validation = self.validator.gemini_validator.validate_weight_with_ai(weight_value)
-                print(f"DEBUG: weight_validation = {weight_validation}")
                 if not weight_validation['is_valid']:
                     warnings.append(weight_validation['reason'])
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError):
                 warnings.append(f"⚠️ 体重が数値ではない: {weight}")
-                print(f"DEBUG: weight conversion error: {e}")
-            except Exception as e:
-                warnings.append(f"⚠️ 体重の検証エラー: {str(e)}")
-                print(f"DEBUG: weight validation exception: {e}")
-        else:
-            print(f"DEBUG: skipping weight validation - jba_weight={jba_data.get('weight')}, csv_weight={row.get('体重')}")
         
         # 出身校：JBAに記載がない場合のみAIで検証
         if not jba_data.get('school') and pd.notna(row.get('出身校')):
             school = row.get('出身校')
-            print(f"DEBUG: checking school = {school}")
             if school and str(school).strip() != "":
-                try:
-                    print(f"DEBUG: calling validate_and_correct_school_with_ai with '{str(school).strip()}'")
-                    school_validation = self.validator.gemini_validator.validate_and_correct_school_with_ai(str(school).strip())
-                    print(f"DEBUG: school_validation = {school_validation}")
-                    if not school_validation['is_valid']:
-                        warnings.append(school_validation['reason'])
-                except Exception as e:
-                    warnings.append(f"⚠️ 出身校の検証エラー: {str(e)}")
-                    print(f"DEBUG: school validation exception: {e}")
-        else:
-            print(f"DEBUG: skipping school validation - jba_school={jba_data.get('school')}, csv_school={row.get('出身校')}")
+                school_validation = self.validator.gemini_validator.validate_and_correct_school_with_ai(str(school).strip())
+                if not school_validation['is_valid']:
+                    warnings.append(school_validation['reason'])
         
-        print(f"DEBUG: final warnings = {warnings}")
+        # 身長はJBAに必ず記載されているのでAI検証不要
+        
         return warnings
     
     def process_csv_file_parallel(self, df, university_name, threshold=1.0):
