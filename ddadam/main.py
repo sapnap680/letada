@@ -51,8 +51,10 @@ def main():
                     # JBAログイン成功
                 else:
                     # JBAログイン失敗
+                    pass
             except Exception as e:
                 # JBAログインエラー
+                pass
         else:
             # JBAログイン情報を入力してください
     
