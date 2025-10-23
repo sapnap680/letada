@@ -48,32 +48,32 @@ def main():
                 if jba_system.login(jba_email, jba_password):
                     st.session_state.jba_logged_in = True
                     st.session_state.jba_system = jba_system
-                    st.success("✅ JBAログイン成功")
+                    # JBAログイン成功
                 else:
-                    st.error("❌ JBAログイン失敗")
+                    # JBAログイン失敗
             except Exception as e:
-                st.error(f"❌ JBAログインエラー: {str(e)}")
+                # JBAログインエラー
         else:
-            st.error("❌ JBAログイン情報を入力してください")
+            # JBAログイン情報を入力してください
     
     # 処理開始ボタン
     if st.sidebar.button("🚀 処理開始", type="primary"):
         try:
             # JBAログイン状態をチェック
             if not st.session_state.get('jba_logged_in', False):
-                st.error("❌ 先にJBAにログインしてください")
+                # 先にJBAにログインしてください
                 return
             
-            st.info("🔄 システムを初期化中...")
+            # システムを初期化中
             
             # システム初期化
             jba_system = st.session_state.jba_system
             validator = DataValidator()
             
-            st.success("✅ システム初期化完了")
+            # システム初期化完了
             
             # 統合システムの処理
-            st.info("📝 統合システムを実行中...")
+            # 統合システムを実行中
             
             # 設定情報をコンパクトに表示
             with st.expander("⚙️ 実行設定", expanded=False):
@@ -94,21 +94,21 @@ def main():
             df = integrated_system.login_and_get_tournament_csvs(username, password, game_id)
             
             if df is not None:
-                st.success(f"✅ {len(df)} 件のデータを取得しました")
+                # データを取得しました
                 
                 # ステップ2: JBA照合
                 st.header("🔍 ステップ2: JBA照合処理")
                 results = integrated_system.process_tournament_data(df)
                 
                 if results:
-                    st.success(f"✅ {len(results)} 件の照合が完了しました")
+                    # 照合が完了しました
                     
                     # ステップ3: レポート作成
                     st.header("📊 ステップ3: 大学別レポート")
                     reports = integrated_system.create_university_reports(results)
                     
                     if reports:
-                        st.success(f"✅ {len(reports)} 大学のレポートを作成しました")
+                        # 大学のレポートを作成しました
                         
                         # 大学選択
                         selected_univ = st.selectbox(
@@ -135,7 +135,7 @@ def main():
                                                 mime="application/pdf"
                                             )
                                     except Exception as e:
-                                        st.error(f"❌ PDF生成エラー: {str(e)}")
+                                        # PDF生成エラー
                             
                             with col2:
                                 # 全大学PDF生成（非同期）
@@ -145,12 +145,12 @@ def main():
                                         # ジョブを開始して job_meta_path を返す
                                         job_meta_path = integrated_system.start_pdf_generation_background(
                                             reports,
-                                            output_filename=os.path.join(integrated_system.temp_dir, f"大会ID{game_id}_全大学選手データ.pdf")
+                                            output_filename=os.path.join(integrated_system.temp_dir, f"大会ID{game_id}_全大学選手データ.zip")
                                         )
                                         st.session_state['pdf_job_meta'] = job_meta_path
-                                        st.success("PDF生成ジョブを開始しました。完了後にダウンロードリンクが表示されます。")
+                                        # PDF生成ジョブを開始しました
                                     except Exception as e:
-                                        st.error(f"❌ PDF生成ジョブ開始エラー: {str(e)}")
+                                        # PDF生成ジョブ開始エラー
 
                                 # 進捗表示・ダウンロード
                                 job_meta_path = st.session_state.get('pdf_job_meta')
@@ -170,13 +170,13 @@ def main():
                                         if status == "done" and output_path and os.path.exists(output_path):
                                             with open(output_path, "rb") as pdf_file:
                                                 st.download_button(
-                                                    label="📚 完了したPDFをダウンロード",
+                                                    label="📚 完了したZIPファイルをダウンロード",
                                                     data=pdf_file.read(),
                                                     file_name=os.path.basename(output_path),
-                                                    mime="application/pdf"
+                                                    mime="application/zip"
                                                 )
                                         elif status == "error":
-                                            st.error(f"PDF生成エラー: {message}")
+                                            # PDF生成エラー
                                             if error:
                                                 st.text(error)
                                         else:
@@ -184,16 +184,16 @@ def main():
                                             if st.button("🔁 更新"):
                                                 st.rerun()
                                     except Exception as e:
-                                        st.error(f"ジョブメタの読み込みに失敗しました: {str(e)}")
+                                        # ジョブメタの読み込みに失敗しました
                     else:
-                        st.error("❌ レポートの作成に失敗しました")
+                        # レポートの作成に失敗しました
                 else:
-                    st.error("❌ JBA照合処理に失敗しました")
+                    # JBA照合処理に失敗しました
             else:
-                st.error("❌ CSV取得に失敗しました")
+                # CSV取得に失敗しました
             
         except Exception as e:
-            st.error(f"❌ エラーが発生しました: {str(e)}")
+            # エラーが発生しました
             st.write("詳細なエラー情報:")
             st.code(str(e))
 

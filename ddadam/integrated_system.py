@@ -12,6 +12,8 @@ import getpass
 from datetime import datetime
 import json
 import uuid
+import multiprocessing
+from integrated_system_worker import pdf_worker_main
 from io import StringIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -457,7 +459,7 @@ class IntegratedTournamentSystem:
         import concurrent.futures
         import time
         
-        st.info(f"🔍 JBA照合処理を開始（並列処理: {self.max_workers}スレッド）...")
+        # JBA照合処理を開始（並列処理）
         
         # パフォーマンス統計をリセット
         self.performance_stats = {
@@ -580,7 +582,7 @@ class IntegratedTournamentSystem:
             st.metric("処理速度", f"{processed/elapsed_time:.1f}選手/秒")
             st.metric("使用スレッド数", f"{optimal_workers}")
         
-        st.success(f"✅ 並列処理完了: {processed}選手を{elapsed_time:.2f}秒で処理")
+        # 並列処理完了
         
         return all_results
     
@@ -628,7 +630,7 @@ class IntegratedTournamentSystem:
         """大学ごとのレポートを作成"""
         
         if not results:
-            st.error("❌ 処理結果がありません")
+            # 処理結果がありません
             return None
         
         # 大学ごとにグループ化
@@ -923,9 +925,9 @@ class IntegratedTournamentSystem:
                                 mime="application/pdf"
                             )
                         
-                        st.success("✅ 全大学のレポートが生成されました!")
+                        # 全大学のレポートが生成されました
                     except Exception as e:
-                        st.error(f"❌ PDF生成エラー: {str(e)}")
+                        # PDF生成エラー
                         st.exception(e)
 
 def main():
@@ -960,21 +962,21 @@ def main():
         df = integrated_system.login_and_get_tournament_csvs(username, password, game_id)
         
         if df is not None:
-            st.success(f"✅ {len(df)} 件のデータを取得しました")
+            # データを取得しました
             
             # ステップ2: JBA照合
             st.header("🔍 ステップ2: JBA照合処理")
             results = integrated_system.process_tournament_data(df)
             
             if results:
-                st.success(f"✅ {len(results)} 件の照合が完了しました")
+                # 照合が完了しました
                 
                 # ステップ3: レポート作成
                 st.header("📊 ステップ3: 大学別レポート")
                 reports = integrated_system.create_university_reports(results)
                 
                 if reports:
-                    st.success(f"✅ {len(reports)} 大学のレポートを作成しました")
+                    # 大学のレポートを作成しました
                     
                     # 大学選択
                     selected_univ = st.selectbox("大学を選択:", list(reports.keys()))
@@ -1010,21 +1012,21 @@ def main():
                             if match_results:
                                 st.dataframe(pd.DataFrame([r['original_data'] for r in match_results]))
                             else:
-                                st.info("完全一致のデータはありません")
+                                # 完全一致のデータはありません
                         
                         with tab3:
                             partial_results = [r for r in report['results'] if r['status'] == 'partial_match']
                             if partial_results:
                                 st.dataframe(pd.DataFrame([r['original_data'] for r in partial_results]))
                             else:
-                                st.info("部分一致のデータはありません")
+                                # 部分一致のデータはありません
                         
                         with tab4:
                             not_found_results = [r for r in report['results'] if r['status'] == 'not_found']
                             if not_found_results:
                                 st.dataframe(pd.DataFrame([r['original_data'] for r in not_found_results]))
                             else:
-                                st.info("未発見のデータはありません")
+                                # 未発見のデータはありません
                         
                         # 全大学一括印刷レポート
                         st.subheader("🖨️ 全大学一括印刷レポート")
@@ -1046,7 +1048,7 @@ def main():
                         with col2:
                             if st.button("📚 全大学一括レポートを生成", type="primary"):
                                 # 全大学のレポートを生成
-                                st.info("📚 全大学のレポートを生成中...")
+                                # 全大学のレポートを生成中
                                 
                                 html_content = self._generate_all_universities_report(reports)
                                 
@@ -1057,14 +1059,14 @@ def main():
                                     mime="text/html"
                                 )
                                 
-                                st.success("✅ 全大学のレポートが生成されました！")
+                                # 全大学のレポートが生成されました
                 
                 else:
-                    st.error("❌ レポートの作成に失敗しました")
+                    # レポートの作成に失敗しました
             else:
-                st.error("❌ JBA照合処理に失敗しました")
+                # JBA照合処理に失敗しました
         else:
-            st.error("❌ CSV取得に失敗しました")
+            # CSV取得に失敗しました
     
     def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf", max_rows_per_page=100):
         """全大学レポートをコンパクトなPDFで出力（画像の形式に準拠）"""
@@ -1229,12 +1231,9 @@ def main():
         return output_path
     
     def start_pdf_generation_background(self, reports, output_filename=None):
-        """reports をバックグラウンドでPDF化するジョブを開始する。
-           ジョブ情報は self.temp_dir/pdf_job_{job_id}.json に保存される。
-           戻り値: job_meta_path (ジョブのステータスを読む JSON ファイルのパス)
-        """
+        """reports をバックグラウンドでPDF化するジョブを開始する（別プロセス版）。"""
         if output_filename is None:
-            output_filename = os.path.join(self.temp_dir, f"all_universities_report_{int(time.time())}.pdf")
+            output_filename = os.path.join(self.temp_dir, f"all_universities_report_{int(time.time())}.zip")
         job_id = str(uuid.uuid4())
         job_meta = {
             "job_id": job_id,
@@ -1249,9 +1248,26 @@ def main():
         with open(job_meta_path, "w", encoding="utf-8") as f:
             json.dump(job_meta, f, ensure_ascii=False, indent=2)
 
-        # スレッドでワーカーを起動
-        thread = threading.Thread(target=self._pdf_worker, args=(reports, output_filename, job_meta_path), daemon=True)
-        thread.start()
+        # --- 安全対策: reports をプリシリアライズ（pickle での不整合を避ける） ---
+        try:
+            serializable_reports = json.loads(json.dumps(reports, default=str))
+        except Exception:
+            # 最低限: 文字列化に失敗したらそのまま渡す（pickle に任せる）
+            serializable_reports = reports
+
+        # --- spawn コンテキストでプロセスを作成 ---
+        try:
+            ctx = multiprocessing.get_context("spawn")
+            proc = ctx.Process(
+                target=pdf_worker_main,
+                args=(serializable_reports, output_filename, job_meta_path),
+                daemon=False
+            )
+            proc.start()
+        except Exception as e:
+            # 失敗したら job_meta にエラーを書き込む
+            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+            raise
 
         return job_meta_path
 
@@ -1270,158 +1286,6 @@ def main():
             # ロギングのみ
             print(f"Failed to write job meta: {e}")
 
-    def _pdf_worker(self, reports, output_path, job_meta_path, max_rows_per_page=100):
-        """バックグラウンドでPDFを生成し、進捗を job_meta_path に書き込む"""
-        try:
-            self._write_job_meta(job_meta_path, status="running", progress=0.0, message="generating")
-
-            # 事前計算: 総ステップ数（大学数 × ページ数）
-            total_steps = 0
-            per_univ_pages = {}
-            for univ_name, report in reports.items():
-                results = report.get("results", [])
-                pages = (len(results) + max_rows_per_page - 1) // max_rows_per_page
-                per_univ_pages[univ_name] = max(1, pages)
-                total_steps += per_univ_pages[univ_name]
-
-            if total_steps == 0:
-                total_steps = 1
-
-            # reportlab のドキュメントを作る
-            doc = SimpleDocTemplate(output_path, pagesize=A4, 
-                                   leftMargin=8*mm, rightMargin=8*mm,
-                                   topMargin=10*mm, bottomMargin=10*mm)
-            styles = getSampleStyleSheet()
-            elements = []
-
-            compact_style = ParagraphStyle(
-                'Compact',
-                parent=styles['Normal'],
-                fontSize=6,
-                leading=6,
-                fontName='MS-Gothic'
-            )
-            title_style = ParagraphStyle(
-                'TitleCompact',
-                parent=styles['Title'],
-                fontSize=8,
-                leading=9,
-                fontName='MS-Gothic'
-            )
-
-            elements.append(Paragraph("🏀 全大学選手データ一覧", title_style))
-            elements.append(Spacer(1, 1))
-
-            steps_done = 0
-            # 各大学ごとにテーブルを作り、ページ単位で進捗を更新
-            for i, (univ_name, report) in enumerate(reports.items()):
-                elements.append(Paragraph(f"【{univ_name}】", compact_style))
-                elements.append(Spacer(1, 1))
-
-                results = report.get("results", [])
-                total_pages = per_univ_pages.get(univ_name, 1)
-
-                for page_num in range(total_pages):
-                    start_idx = page_num * max_rows_per_page
-                    end_idx = min(start_idx + max_rows_per_page, len(results))
-                    page_results = results[start_idx:end_idx]
-
-                    # table header + rows
-                    data = [["No", "選手名", "カナ名", "学部", "学年", "身長", "体重", "ポジション", "出身校", "JBA"]]
-                    for idx, r in enumerate(page_results, start=start_idx+1):
-                        d = r.get("original_data", {})
-                        status = r.get("status", "unknown")
-                        if status == "match":
-                            status_symbol = "✓"
-                        elif status == "partial_match":
-                            status_symbol = "△"
-                        elif status == "not_found":
-                            status_symbol = "×"
-                        else:
-                            status_symbol = "-"
-
-                        no = d.get("No", d.get("背番号", ""))
-                        player_name = d.get("選手名", d.get("氏名", ""))
-                        kana_name = d.get("カナ名", "")
-                        department = d.get("学部", "")
-                        grade = d.get("学年", "")
-                        height = d.get("身長", "")
-                        weight = d.get("体重", "")
-                        position = d.get("ポジション", "")
-                        school = d.get("出身校", "")
-
-                        # 変更 (correction) があれば強調
-                        if r.get("correction"):
-                            corrected = r["correction"]
-                            if corrected.get("選手名") and corrected.get("選手名") != player_name:
-                                player_name = f'<font color="red">{corrected.get("選手名")}</font>'
-                            if corrected.get("体重") and corrected.get("体重") != weight:
-                                weight = f'<font color="red">{corrected.get("体重")}</font>'
-                            if corrected.get("出身校") and corrected.get("出身校") != school:
-                                school = f'<font color="red">{corrected.get("出身校")}</font>'
-
-                        row_data = [
-                            self._truncate_text(no, 3),
-                            self._truncate_text(player_name, 8),
-                            self._truncate_text(kana_name, 8),
-                            self._truncate_text(department, 6),
-                            self._truncate_text(grade, 3),
-                            self._truncate_text(height, 5),
-                            self._truncate_text(weight, 4),
-                            self._truncate_text(position, 6),
-                            self._truncate_text(school, 10),
-                            status_symbol
-                        ]
-                        data.append(row_data)
-
-                    col_widths = [8*mm, 18*mm, 18*mm, 12*mm, 8*mm, 10*mm, 8*mm, 12*mm, 20*mm, 8*mm]
-                    row_heights = [10] + [7] * (len(data) - 1)
-                    table = Table(data, colWidths=col_widths, rowHeights=row_heights, repeatRows=1)
-                    table.setStyle(TableStyle([
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                        ("FONTNAME", (0, 0), (-1, 0), "MS-Gothic"),
-                        ("FONTSIZE", (0, 0), (-1, 0), 5),
-                        ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
-                        ("FONTNAME", (0, 1), (-1, -1), "MS-Gothic"),
-                        ("FONTSIZE", (0, 1), (-1, -1), 4),
-                        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
-                        ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
-                        ("LINEBELOW", (0, 0), (-1, 0), 1, colors.black),
-                        ("TOPPADDING", (0, 1), (-1, -1), 1),
-                        ("BOTTOMPADDING", (0, 1), (-1, -1), 1),
-                        ("LEFTPADDING", (0, 0), (-1, -1), 1),
-                        ("RIGHTPADDING", (0, 0), (-1, -1), 1),
-                    ]))
-                    elements.append(table)
-
-                    # ページ終了処理: ページ区切りを挿入（最後のページ以外）
-                    if page_num < total_pages - 1:
-                        elements.append(Spacer(1, 5))
-                        elements.append(Paragraph(f"(ページ {page_num+1}/{total_pages})", compact_style))
-                        elements.append(PageBreak())
-
-                    # 進捗更新
-                    steps_done += 1
-                    progress = steps_done / total_steps
-                    self._write_job_meta(job_meta_path, progress=progress, message=f"processing {univ_name} page {page_num+1}/{total_pages}")
-
-                # 大学区切り（最後の大学以外）
-                if i < len(reports) - 1:
-                    elements.append(PageBreak())
-
-            # PDFを生成
-            doc.build(elements)
-
-            # 完了
-            self._write_job_meta(job_meta_path, status="done", progress=1.0, message="completed", output_path=output_path)
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            self._write_job_meta(job_meta_path, status="error", progress=0.0, message=str(e), error=tb)
-            print(f"PDF worker error: {e}\n{tb}")
     
     def export_single_university_report_as_pdf(self, university_name, report, output_path=None):
         """単一大学のレポートをPDF出力"""

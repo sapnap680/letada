@@ -106,7 +106,7 @@ class JBAVerificationSystem:
     def login(self, email, password):
         """JBAサイトにログイン"""
         try:
-            st.info("🔐 JBAサイトにログイン中...")
+            # JBAサイトにログイン中
             
             login_page = self.session.get("https://team-jba.jp/login")
             soup = BeautifulSoup(login_page.content, 'html.parser')
@@ -126,30 +126,30 @@ class JBAVerificationSystem:
             login_response = self.session.post(login_url, data=login_data, allow_redirects=True)
             
             if "ログアウト" in login_response.text:
-                st.success("✅ ログイン成功")
+                # ログイン成功
                 self.logged_in = True
                 return True
             else:
-                st.error("❌ ログインに失敗しました")
+                # ログインに失敗しました
                 return False
                 
         except Exception as e:
-            st.error(f"❌ ログインエラー: {str(e)}")
+            # ログインエラー
             return False
     
     def search_teams_by_university(self, university_name):
         """大学名でチームを検索（柔軟な照合）"""
         try:
             if not self.logged_in:
-                st.error("❌ ログインが必要です")
+                # ログインが必要です
                 return []
             
             current_year = self.get_current_fiscal_year()
-            st.info(f"🔍 {university_name}の男子チームを検索中... ({current_year}年度)")
+            # 男子チームを検索中
             
             # 大学名の正規化（柔軟な照合のため）
             normalized_university = self.normalize_university_name(university_name)
-            st.info(f"🔍 正規化された大学名: {normalized_university}")
+            # 正規化された大学名
             
             # 正規化された大学名で検索
             search_university = normalized_university
@@ -159,7 +159,7 @@ class JBAVerificationSystem:
             search_page = self.session.get(search_url)
             
             if search_page.status_code != 200:
-                st.error("❌ 検索ページにアクセスできません")
+                # 検索ページにアクセスできません
                 return []
             
             soup = BeautifulSoup(search_page.content, 'html.parser')
@@ -198,7 +198,7 @@ class JBAVerificationSystem:
             )
             
             if search_response.status_code != 200:
-                st.error("❌ 検索リクエストが失敗しました")
+                # 検索リクエストが失敗しました
                 return []
             
             # JSONレスポンスを解析
@@ -216,15 +216,15 @@ class JBAVerificationSystem:
                                 'url': f"https://team-jba.jp/organization/15250600/team/{team_data.get('id', '')}/detail"
                             })
                 
-                st.success(f"✅ {university_name}の男子チーム: {len(teams)}件見つかりました")
+                # 男子チームが見つかりました
                 return teams
                 
             except Exception as e:
-                st.error(f"❌ 検索結果の解析に失敗しました: {str(e)}")
+                # 検索結果の解析に失敗しました
                 return []
             
         except Exception as e:
-            st.error(f"❌ チーム検索エラー: {str(e)}")
+            # チーム検索エラー
             return []
     
     def _search_teams_by_university_silent(self, university_name):
@@ -312,14 +312,14 @@ class JBAVerificationSystem:
     def get_team_members(self, team_url):
         """チームのメンバー情報を取得（男子チームのみ）"""
         try:
-            st.info(f"📊 チームメンバー情報を取得中...")
+            # チームメンバー情報を取得中
             st.write(f"🔍 チームURL: {team_url}")
             
             # チーム詳細ページにアクセス
             team_page = self.session.get(team_url)
             
             if team_page.status_code != 200:
-                st.error(f"❌ チームページにアクセスできません (Status: {team_page.status_code})")
+                # チームページにアクセスできません
                 return {"team_name": "Error", "members": []}
             
             soup = BeautifulSoup(team_page.content, 'html.parser')
@@ -386,7 +386,7 @@ class JBAVerificationSystem:
             }
             
         except Exception as e:
-            st.error(f"❌ メンバー取得エラー: {str(e)}")
+            # メンバー取得エラー
             import traceback
             st.write(f"**エラー詳細**: {traceback.format_exc()}")
             return {"team_name": "Error", "team_url": team_url, "members": []}
@@ -477,13 +477,13 @@ class JBAVerificationSystem:
             if not detail_url:
                 return {}
             
-            st.info(f"🔍 選手詳細情報を取得中: {detail_url}")
+            # 選手詳細情報を取得中
             
             # 選手詳細ページにアクセス
             detail_page = self.session.get(detail_url)
             
             if detail_page.status_code != 200:
-                st.warning(f"⚠️ 選手詳細ページにアクセスできません (Status: {detail_page.status_code})")
+                # 選手詳細ページにアクセスできません
                 return {}
             
             soup = BeautifulSoup(detail_page.content, 'html.parser')
@@ -570,7 +570,7 @@ class JBAVerificationSystem:
             return player_details
             
         except Exception as e:
-            st.warning(f"⚠️ 選手詳細取得エラー: {str(e)}")
+            # 選手詳細取得エラー
             return {}
     
 
@@ -683,13 +683,13 @@ class JBAVerificationSystem:
                 st.write(f"🔍 検索結果: {len(teams)}チーム見つかりました")
                 
                 if teams:
-                    st.success(f"✅ {variation}でチームが見つかりました")
+                    # チームが見つかりました
                     break
                 else:
-                    st.info(f"❌ {variation}ではチームが見つかりませんでした")
+                    # チームが見つかりませんでした
             
             if not teams:
-                st.warning(f"❌ {university}の男子チームが見つかりませんでした")
+                # 男子チームが見つかりませんでした
                 return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
             # 各チームのメンバー情報を取得して照合
@@ -717,7 +717,7 @@ class JBAVerificationSystem:
 
                         # 第1段階: 0.6の閾値で候補を探す
                         if name_similarity >= 0.6:
-                            st.info(f"🔍 候補発見: {member['name']} (類似度: {name_similarity:.3f})")
+                            # 候補発見
                             
                             # 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
@@ -751,7 +751,7 @@ class JBAVerificationSystem:
                             
                             # すべての条件が満たされれば完全一致
                             if jba_name_match and jba_kana_match and jba_grade_match and jba_height_match and jba_weight_match:
-                                st.success(f"✅ 完全一致: {member['name']}")
+                                # 完全一致
                                 return {
                                     "status": "match",
                                     "jba_data": member,
@@ -760,7 +760,7 @@ class JBAVerificationSystem:
                             
                             # 0.6以上1.0未満の候補も保存（最終的に返す可能性）
                             elif name_similarity >= 0.6 and name_similarity < 1.0:
-                                st.info(f"📝 候補保存: {member['name']} (類似度: {name_similarity:.3f})")
+                                # 候補保存
                                 
                                 if get_details and member.get("detail_url"):
                                     player_details = self.get_player_details(member["detail_url"])
@@ -773,24 +773,24 @@ class JBAVerificationSystem:
                                     "message": f"部分一致: {member['name']} (類似度: {name_similarity:.3f})"
                                 })
                 else:
-                    st.warning(f"❌ チーム {team['name']} のメンバー情報が取得できませんでした")
+                    # チームのメンバー情報が取得できませんでした
 
             # 完全一致を優先し、なければ部分一致を返す
             if all_matched_members:
                 # 完全一致（類似度1.0）を優先
                 exact_matches = [m for m in all_matched_members if m["similarity"] >= 1.0]
                 if exact_matches:
-                    st.info(f"🎯 完全一致候補: {len(exact_matches)}件")
+                    # 完全一致候補
                     return exact_matches[0]  # 最初の完全一致を返す
                 
                 # 部分一致（類似度0.6以上1.0未満）を返す
                 partial_matches = [m for m in all_matched_members if m["similarity"] >= 0.6 and m["similarity"] < 1.0]
                 if partial_matches:
-                    st.info(f"📝 部分一致候補: {len(partial_matches)}件")
+                    # 部分一致候補
                     return partial_matches[0]  # 最初の部分一致を返す
                 
                 # その他の候補
-                st.info(f"🔍 その他候補: {len(all_matched_members)}件")
+                # その他候補
                 return all_matched_members[0]
 
             return {"status": "not_found", "message": "JBAデータベースに該当する選手が見つかりませんでした"}
