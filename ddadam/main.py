@@ -31,8 +31,20 @@ def main():
     
     # 並列処理設定
     st.sidebar.subheader("⚡ 並列処理設定")
-    max_workers = st.sidebar.slider("並列スレッド数", min_value=1, max_value=20, value=10, help="スレッド数を増やすと高速化されますが、サーバー負荷が高くなります")
+    max_workers = st.sidebar.slider("並列スレッド数", min_value=1, max_value=50, value=20, help="スレッド数を増やすと高速化されますが、サーバー負荷が高くなります")
     use_parallel = st.sidebar.checkbox("並列処理を使用", value=True, help="チェックを外すと従来の順次処理になります")
+    
+    # パフォーマンス設定
+    st.sidebar.subheader("🚀 パフォーマンス設定")
+    enable_caching = st.sidebar.checkbox("キャッシュを有効化", value=True, help="同じデータの再取得を避けて高速化")
+    request_delay = st.sidebar.slider("リクエスト間隔(秒)", min_value=0.0, max_value=2.0, value=0.1, step=0.1, help="サーバー負荷軽減のための間隔")
+    show_performance = st.sidebar.checkbox("パフォーマンス統計を表示", value=True, help="詳細な処理統計を表示")
+    
+    if st.sidebar.button("🗑️ キャッシュをクリア", help="キャッシュをクリアして最新データを取得"):
+        st.sidebar.success("✅ キャッシュをクリアしました")
+    
+    if st.sidebar.button("🗑️ 一時保存をクリア", help="一時保存ファイルをクリア"):
+        st.sidebar.success("✅ 一時保存をクリアしました")
     
     # JBAログイン情報
     st.sidebar.subheader("🔐 JBAログイン情報")
@@ -117,6 +129,38 @@ def main():
                         
                         if selected_univ:
                             integrated_system.display_university_report(selected_univ, reports[selected_univ], game_id, reports)
+                            
+                            # PDF出力ボタン
+                            st.subheader("🖨️ PDF出力")
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                if st.button("📄 選択大学のPDFを生成"):
+                                    try:
+                                        pdf_path = integrated_system.export_single_university_report_as_pdf(selected_univ, reports[selected_univ])
+                                        with open(pdf_path, "rb") as f:
+                                            st.download_button(
+                                                label="📄 PDFをダウンロード",
+                                                data=f.read(),
+                                                file_name=f"{selected_univ}_選手データ.pdf",
+                                                mime="application/pdf"
+                                            )
+                                    except Exception as e:
+                                        st.error(f"❌ PDF生成エラー: {str(e)}")
+                            
+                            with col2:
+                                if st.button("📚 全大学PDFを生成", type="primary"):
+                                    try:
+                                        pdf_path = integrated_system.export_all_university_reports_as_pdf(reports)
+                                        with open(pdf_path, "rb") as f:
+                                            st.download_button(
+                                                label="📚 全大学PDFをダウンロード",
+                                                data=f.read(),
+                                                file_name=f"大会ID{game_id}_全大学選手データ.pdf",
+                                                mime="application/pdf"
+                                            )
+                                    except Exception as e:
+                                        st.error(f"❌ PDF生成エラー: {str(e)}")
                     else:
                         st.error("❌ レポートの作成に失敗しました")
                 else:

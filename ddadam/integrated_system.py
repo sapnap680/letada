@@ -5,12 +5,19 @@ import pandas as pd
 import os
 import re
 import time
+import threading
 import argparse
 from urllib.parse import urljoin
 import getpass
 from datetime import datetime
 import json
 from io import StringIO
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import simpleSplit
+import multiprocessing
 
 # 既存のJBA検証システムのインポート
 import sys
@@ -22,12 +29,103 @@ from jba_verification_lib import JBAVerificationSystem, FastCSVCorrectionSystem,
 class IntegratedTournamentSystem:
     """大会IDからJBA照合まで一括処理する統合システム"""
     
-    def __init__(self, jba_system, validator, max_workers=10, use_parallel=True):
+    def __init__(self, jba_system, validator, max_workers=20, use_parallel=True):
         self.jba_system = jba_system
         self.validator = validator
         self.base_url = "https://www.kcbbf.jp"
         self.max_workers = max_workers
         self.use_parallel = use_parallel
+        
+        # パフォーマンス監視用
+        self.performance_stats = {
+            'total_time': 0,
+            'io_time': 0,
+            'processing_time': 0,
+            'cache_hits': 0,
+            'cache_misses': 0,
+            'requests_count': 0,
+            'avg_response_time': 0
+        }
+        
+        # キャッシュ用
+        self._cache = {}
+        self._cache_lock = threading.Lock()
+        
+        # CPU最適化
+        self.cpu_count = multiprocessing.cpu_count()
+        self.max_workers = min(self.max_workers, self.cpu_count * 2)
+        
+        # 一時保存用ディレクトリ
+        self.temp_dir = "temp_results"
+        if not os.path.exists(self.temp_dir):
+            os.makedirs(self.temp_dir)
+    
+    def _truncate_text(self, text, max_chars=30):
+        """テキストを指定文字数で切り詰め（PDF軽量化用）"""
+        if not isinstance(text, str):
+            text = str(text)
+        return text if len(text) <= max_chars else text[:max_chars] + "..."
+    
+    def _get_cached_data(self, key):
+        """キャッシュからデータを取得"""
+        with self._cache_lock:
+            if key in self._cache:
+                self.performance_stats['cache_hits'] += 1
+                return self._cache[key]
+            else:
+                self.performance_stats['cache_misses'] += 1
+                return None
+    
+    def _set_cached_data(self, key, value):
+        """データをキャッシュに保存"""
+        with self._cache_lock:
+            self._cache[key] = value
+    
+    def _clear_cache(self):
+        """キャッシュをクリア"""
+        with self._cache_lock:
+            self._cache.clear()
+    
+    def _measure_time(self, func, *args, **kwargs):
+        """関数の実行時間を測定"""
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        return result, execution_time
+    
+    def _save_temp_results(self, univ_name, results):
+        """大学ごとの結果を一時保存"""
+        temp_file = os.path.join(self.temp_dir, f"temp_results_{univ_name}.csv")
+        try:
+            if results:
+                df = pd.DataFrame(results)
+                df.to_csv(temp_file, index=False, encoding='utf-8-sig')
+                st.write(f"💾 {univ_name}: 一時保存完了")
+        except Exception as e:
+            st.warning(f"⚠️ {univ_name}: 一時保存エラー - {str(e)}")
+    
+    def _load_temp_results(self, univ_name):
+        """大学ごとの結果を一時保存から読み込み"""
+        temp_file = os.path.join(self.temp_dir, f"temp_results_{univ_name}.csv")
+        if os.path.exists(temp_file):
+            try:
+                df = pd.read_csv(temp_file, encoding='utf-8-sig')
+                st.write(f"📂 {univ_name}: 一時保存から復元")
+                return df.to_dict('records')
+            except Exception as e:
+                st.warning(f"⚠️ {univ_name}: 一時保存読み込みエラー - {str(e)}")
+        return None
+    
+    def _clear_temp_results(self):
+        """一時保存ファイルをクリア"""
+        try:
+            for file in os.listdir(self.temp_dir):
+                if file.startswith("temp_results_") and file.endswith(".csv"):
+                    os.remove(os.path.join(self.temp_dir, file))
+            st.success("🗑️ 一時保存ファイルをクリアしました")
+        except Exception as e:
+            st.warning(f"⚠️ 一時保存クリアエラー: {str(e)}")
         
     def login_and_get_tournament_csvs(self, username, password, game_id):
         """ログインして大会の全CSVを取得"""
@@ -320,7 +418,18 @@ class IntegratedTournamentSystem:
         import concurrent.futures
         import time
         
-        st.info("🔍 JBA照合処理を開始（並列処理）...")
+        st.info(f"🔍 JBA照合処理を開始（並列処理: {self.max_workers}スレッド）...")
+        
+        # パフォーマンス統計をリセット
+        self.performance_stats = {
+            'total_time': 0,
+            'io_time': 0,
+            'processing_time': 0,
+            'cache_hits': 0,
+            'cache_misses': 0,
+            'requests_count': 0,
+            'avg_response_time': 0
+        }
         
         # 大学ごとに処理
         universities = df['大学名'].unique() if '大学名' in df.columns else [university_name or "Unknown"]
@@ -333,28 +442,57 @@ class IntegratedTournamentSystem:
         total_players = len(df)
         processed = 0
         
-        # 全選手のデータを準備
+        # 全選手のデータを準備（Pandas最適化）
         player_data = []
-        for univ in universities:
-            if '大学名' in df.columns:
-                univ_data = df[df['大学名'] == univ].copy()
-            else:
-                univ_data = df.copy()
-            
-            for index, row in univ_data.iterrows():
-                player_name = None
-                name_columns = ['選手名', '氏名', 'name', 'Name']
-                
-                for col in name_columns:
-                    if col in univ_data.columns and pd.notna(row[col]):
-                        player_name = str(row[col]).strip()
-                        break
-                
-                if player_name:
-                    player_data.append((index, row, univ, player_name))
         
-        # 並列処理でJBA照合
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        # ベクトル化処理で選手名を一括取得
+        name_columns = ['選手名', '氏名', 'name', 'Name']
+        available_name_cols = [col for col in name_columns if col in df.columns]
+        
+        if available_name_cols:
+            # 最初に見つかった名前カラムを使用
+            name_col = available_name_cols[0]
+            df[name_col] = df[name_col].astype(str).str.strip()
+            
+            # 大学ごとに処理
+            for univ in universities:
+                if '大学名' in df.columns:
+                    univ_data = df[df['大学名'] == univ].copy()
+                else:
+                    univ_data = df.copy()
+                
+                # 有効な選手名のみを抽出
+                valid_players = univ_data[pd.notna(univ_data[name_col]) & (univ_data[name_col] != '')]
+                
+                for index, row in valid_players.iterrows():
+                    player_name = str(row[name_col]).strip()
+                    if player_name:
+                        player_data.append((index, row, univ, player_name))
+        else:
+            # フォールバック: 従来の方法
+            for univ in universities:
+                if '大学名' in df.columns:
+                    univ_data = df[df['大学名'] == univ].copy()
+                else:
+                    univ_data = df.copy()
+                
+                for index, row in univ_data.iterrows():
+                    player_name = None
+                    for col in name_columns:
+                        if col in univ_data.columns and pd.notna(row[col]):
+                            player_name = str(row[col]).strip()
+                            break
+                    
+                    if player_name:
+                        player_data.append((index, row, univ, player_name))
+        
+        # 並列処理でJBA照合（スレッド数を動的調整）
+        optimal_workers = min(self.max_workers, len(player_data), 20)
+        
+        # 大学ごとの結果を一時保存
+        university_results = {}
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=optimal_workers) as executor:
             futures = []
             
             for index, row, univ, player_name in player_data:
@@ -369,40 +507,85 @@ class IntegratedTournamentSystem:
                     all_results.append(result)
                     processed += 1
                     
+                    # 大学ごとの結果を一時保存
+                    univ = result.get('university', 'Unknown')
+                    if univ not in university_results:
+                        university_results[univ] = []
+                    university_results[univ].append(result)
+                    
                     # 進捗更新（10選手ごと）
                     if processed % 10 == 0 or processed == total_players:
                         progress = processed / total_players
                         progress_bar.progress(progress)
                         status_text.text(f"処理中: {processed}/{total_players} - {result['original_data'].get('選手名', 'Unknown')}")
+                        
+                        # 大学ごとの結果を一時保存（10選手ごと）
+                        if processed % 10 == 0:
+                            for univ_name, univ_results in university_results.items():
+                                self._save_temp_results(univ_name, univ_results)
                     
                 except Exception as e:
                     st.error(f"❌ 並列処理エラー: {str(e)}")
         
+        # 最終的な一時保存
+        for univ_name, univ_results in university_results.items():
+            self._save_temp_results(univ_name, univ_results)
+        
         elapsed_time = time.time() - start_time
+        self.performance_stats['total_time'] = elapsed_time
         
         # 結果をコンパクトに表示
         with st.expander("📊 処理結果詳細", expanded=False):
             st.metric("処理時間", f"{elapsed_time:.2f}秒")
             st.metric("平均処理時間", f"{elapsed_time/processed:.2f}秒/選手")
             st.metric("処理速度", f"{processed/elapsed_time:.1f}選手/秒")
+            st.metric("使用スレッド数", f"{optimal_workers}")
+            st.metric("キャッシュヒット率", f"{self.performance_stats['cache_hits']/(self.performance_stats['cache_hits']+self.performance_stats['cache_misses'])*100:.1f}%")
+            st.metric("リクエスト数", f"{self.performance_stats['requests_count']}")
         
         st.success(f"✅ 並列処理完了: {processed}選手を{elapsed_time:.2f}秒で処理")
         
         return all_results
     
     def _process_single_player_parallel(self, index, row, univ, player_name):
-        """単一選手の並列処理"""
-        # JBA照合
+        """単一選手の並列処理（キャッシュ付き）"""
+        # キャッシュキーを生成
+        cache_key = f"player_{player_name}_{univ}"
+        cached_result = self._get_cached_data(cache_key)
+        
+        if cached_result:
+            # キャッシュから取得
+            cached_result['index'] = index
+            cached_result['original_data'] = row.to_dict()
+            return cached_result
+        
+        # 実際にJBA照合を実行
+        start_time = time.time()
         verification_result = self.jba_system.verify_player_info(
             player_name, None, univ, get_details=True, threshold=1.0
         )
+        end_time = time.time()
         
-        return {
+        # パフォーマンス統計を更新
+        self.performance_stats['requests_count'] += 1
+        response_time = end_time - start_time
+        self.performance_stats['avg_response_time'] = (
+            (self.performance_stats['avg_response_time'] * (self.performance_stats['requests_count'] - 1) + response_time) 
+            / self.performance_stats['requests_count']
+        )
+        
+        result = {
             'index': index,
             'original_data': row.to_dict(),
             'verification_result': verification_result,
-            'status': verification_result['status']
+            'status': verification_result['status'],
+            'university': univ
         }
+        
+        # 結果をキャッシュに保存
+        self._set_cached_data(cache_key, result)
+        
+        return result
     
     def create_university_reports(self, results):
         """大学ごとのレポートを作成"""
@@ -885,6 +1068,172 @@ def main():
                 st.error("❌ JBA照合処理に失敗しました")
         else:
             st.error("❌ CSV取得に失敗しました")
+    
+    def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf"):
+        """全大学レポートを1ファイルのPDFにまとめて出力"""
+        doc = SimpleDocTemplate(output_path, pagesize=A4)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # ヘッダー情報
+        elements.append(Paragraph("🏀 全大学選手データ一覧", styles["Title"]))
+        elements.append(Paragraph(f"生成日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}", styles["Normal"]))
+        elements.append(Paragraph(f"総大学数: {len(reports)} 大学", styles["Normal"]))
+        elements.append(Spacer(1, 20))
+        
+        # 全体統計
+        total_players = sum(report['total_players'] for report in reports.values())
+        total_matches = sum(report['match_count'] for report in reports.values())
+        overall_match_rate = (total_matches / total_players * 100) if total_players > 0 else 0
+        
+        elements.append(Paragraph("📊 全体統計", styles["Heading2"]))
+        elements.append(Paragraph(f"総選手数: {total_players}", styles["Normal"]))
+        elements.append(Paragraph(f"完全一致: {total_matches}", styles["Normal"]))
+        elements.append(Paragraph(f"全体一致率: {overall_match_rate:.1f}%", styles["Normal"]))
+        elements.append(Spacer(1, 20))
+        
+        # 各大学のレポート
+        for i, (univ_name, report) in enumerate(reports.items()):
+            elements.append(Paragraph(f"🏫 {univ_name}", styles["Heading1"]))
+            elements.append(Spacer(1, 12))
+            
+            # 大学統計
+            elements.append(Paragraph(f"総選手数: {report['total_players']}", styles["Normal"]))
+            elements.append(Paragraph(f"完全一致: {report['match_count']}", styles["Normal"]))
+            elements.append(Paragraph(f"部分一致: {report['partial_match_count']}", styles["Normal"]))
+            elements.append(Paragraph(f"未発見: {report['not_found_count']}", styles["Normal"]))
+            elements.append(Paragraph(f"一致率: {report['match_rate']:.1f}%", styles["Normal"]))
+            elements.append(Spacer(1, 12))
+            
+            # 選手データテーブル
+            elements.append(Paragraph("選手詳細データ", styles["Heading2"]))
+            
+            # テーブルデータ作成（軽量化）
+            data = [["選手名", "身長", "体重", "ポジション", "出身校", "学年", "背番号", "照合結果"]]
+            for r in report["results"]:
+                d = r["original_data"]
+                status = r.get("status", "unknown")
+                message = r.get("message", "")
+                
+                # ステータスに応じて色分け
+                status_text = ""
+                if status == "match":
+                    status_text = "✅ 完全一致"
+                elif status == "partial_match":
+                    status_text = "⚠️ 部分一致"
+                elif status == "not_found":
+                    status_text = "❌ 未発見"
+                else:
+                    status_text = f"❓ {status}"
+                
+                # テキストを短縮してPDF軽量化
+                data.append([
+                    self._truncate_text(d.get("選手名", d.get("氏名", "")), 20),
+                    self._truncate_text(d.get("身長", ""), 10),
+                    self._truncate_text(d.get("体重", ""), 10),
+                    self._truncate_text(d.get("ポジション", ""), 15),
+                    self._truncate_text(d.get("出身校", ""), 25),
+                    self._truncate_text(d.get("学年", ""), 10),
+                    self._truncate_text(d.get("背番号", ""), 10),
+                    self._truncate_text(status_text, 20)
+                ])
+            
+            # テーブル作成
+            table = Table(data, repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            elements.append(table)
+            
+            # 各大学をページ区切り（最後の大学以外）
+            if i < len(reports) - 1:
+                elements.append(PageBreak())
+        
+        # PDF生成
+        doc.build(elements)
+        return output_path
+    
+    def export_single_university_report_as_pdf(self, university_name, report, output_path=None):
+        """単一大学のレポートをPDF出力"""
+        if output_path is None:
+            output_path = f"{university_name}_選手データ.pdf"
+        
+        doc = SimpleDocTemplate(output_path, pagesize=A4)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # ヘッダー情報
+        elements.append(Paragraph(f"🏫 {university_name} 選手データ", styles["Title"]))
+        elements.append(Paragraph(f"生成日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}", styles["Normal"]))
+        elements.append(Spacer(1, 20))
+        
+        # 統計情報
+        elements.append(Paragraph("📊 統計情報", styles["Heading2"]))
+        elements.append(Paragraph(f"総選手数: {report['total_players']}", styles["Normal"]))
+        elements.append(Paragraph(f"完全一致: {report['match_count']}", styles["Normal"]))
+        elements.append(Paragraph(f"部分一致: {report['partial_match_count']}", styles["Normal"]))
+        elements.append(Paragraph(f"未発見: {report['not_found_count']}", styles["Normal"]))
+        elements.append(Paragraph(f"一致率: {report['match_rate']:.1f}%", styles["Normal"]))
+        elements.append(Spacer(1, 20))
+        
+        # 選手データテーブル
+        elements.append(Paragraph("選手詳細データ", styles["Heading2"]))
+        
+        # テーブルデータ作成（軽量化）
+        data = [["選手名", "身長", "体重", "ポジション", "出身校", "学年", "背番号", "照合結果"]]
+        for r in report["results"]:
+            d = r["original_data"]
+            status = r.get("status", "unknown")
+            
+            # ステータスに応じて色分け
+            status_text = ""
+            if status == "match":
+                status_text = "✅ 完全一致"
+            elif status == "partial_match":
+                status_text = "⚠️ 部分一致"
+            elif status == "not_found":
+                status_text = "❌ 未発見"
+            else:
+                status_text = f"❓ {status}"
+            
+            # テキストを短縮してPDF軽量化
+            data.append([
+                self._truncate_text(d.get("選手名", d.get("氏名", "")), 20),
+                self._truncate_text(d.get("身長", ""), 10),
+                self._truncate_text(d.get("体重", ""), 10),
+                self._truncate_text(d.get("ポジション", ""), 15),
+                self._truncate_text(d.get("出身校", ""), 25),
+                self._truncate_text(d.get("学年", ""), 10),
+                self._truncate_text(d.get("背番号", ""), 10),
+                self._truncate_text(status_text, 20)
+            ])
+        
+        # テーブル作成
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elements.append(table)
+        
+        # PDF生成
+        doc.build(elements)
+        return output_path
 
 if __name__ == "__main__":
     main()
