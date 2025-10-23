@@ -15,6 +15,9 @@ import json
 import sys
 sys.path.append('.')
 
+# JBA検証システムのインポート
+from jba_verification_lib import JBAVerificationSystem, FastCSVCorrectionSystem, DataValidator
+
 class IntegratedTournamentSystem:
     """大会IDからJBA照合まで一括処理する統合システム"""
     
