@@ -139,6 +139,7 @@ def main():
                                             )
                                     except Exception as e:
                                         # PDF生成エラー
+                                        pass
                             
                             with col2:
                                 # 全大学PDF生成（非同期）
@@ -154,6 +155,7 @@ def main():
                                         # PDF生成ジョブを開始しました
                                     except Exception as e:
                                         # PDF生成ジョブ開始エラー
+                                        pass
 
                                 # 進捗表示・ダウンロード
                                 job_meta_path = st.session_state.get('pdf_job_meta')
@@ -188,6 +190,7 @@ def main():
                                                 st.rerun()
                                     except Exception as e:
                                         # ジョブメタの読み込みに失敗しました
+                                        pass
                     else:
                         # レポートの作成に失敗しました
                 else:
