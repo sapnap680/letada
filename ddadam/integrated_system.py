@@ -559,7 +559,7 @@ def main():
     if st.sidebar.button("🚀 処理開始", type="primary"):
         
         # システム初期化
-        from csv_verification_system import JBAVerificationSystem, DataValidator
+        from jba_verification_lib import JBAVerificationSystem, DataValidator
         
         jba_system = JBAVerificationSystem()
         validator = DataValidator()
