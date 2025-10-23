@@ -14,7 +14,7 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 import io
-import google.generativeai as genai
+# import google.generativeai as genai  # AI機能は使用しない
 import os
 import concurrent.futures
 import time
@@ -750,158 +750,48 @@ class JBAVerificationSystem:
         except Exception as e:
             return {"status": "error", "message": f"照合エラー: {str(e)}"}
 
-class GeminiValidator:
-    """Google Gemini APIを使用したAI検証システム"""
+# AI機能は使用しないため削除
     
-    def __init__(self, api_key=None):
-        self.api_key = api_key
-        if api_key:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel("gemini-1.5-flash")
-        else:
-            self.model = None
+# AI機能は使用しないため削除
     
-    def validate_weight_with_ai(self, weight):
-        """Gemini APIを使用した体重検証"""
-        if not self.api_key or not self.model:
-            return {'is_valid': True, 'reason': 'Gemini APIキーが設定されていません', 'correction': None}
-        
-        try:
-            prompt = f"""
-            以下の体重データが正常かどうかを判断してください。
-            バスケットボール選手（成人男性）の体重として妥当かどうかを評価してください。
-            
-            体重: {weight}kg
-            
-            以下のJSON形式で回答してください：
-            {{
-                "status": "normal|abnormal|correction",
-                "reason": "理由の説明",
-                "suggested_value": "推奨値（訂正の場合のみ）"
-            }}
-            """
-            
-            response = self.model.generate_content(prompt)
-            result = response.text.strip()
-            
-            try:
-                # JSON形式の回答を解析
-                import json
-                data = json.loads(result)
-                
-                if data.get("status") == "abnormal":
-                    return {'is_valid': False, 'reason': f'AI検証: {data.get("reason", "異常な体重です")}', 'correction': None}
-                elif data.get("status") == "correction":
-                    return {'is_valid': False, 'reason': f'AI検証: {data.get("reason", "訂正が必要です")}', 'correction': data.get("suggested_value")}
-                else:
-                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
-            except (json.JSONDecodeError, KeyError):
-                # JSON解析に失敗した場合は従来の方法で判定
-                result_lower = result.lower()
-                if "異常" in result_lower or "abnormal" in result_lower:
-                    return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
-                elif "訂正" in result_lower or "correction" in result_lower:
-                    return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
-                else:
-                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
-                
-        except Exception as e:
-            return {'is_valid': True, 'reason': f'Gemini API エラー: {str(e)}', 'correction': None}
-    
-    def validate_and_correct_school_with_ai(self, school_name):
-        """Gemini APIを使用した出身校検証と訂正"""
-        if not self.api_key or not self.model:
-            return {'is_valid': True, 'reason': 'Gemini APIキーが設定されていません', 'correction': None}
-        
-        try:
-            prompt = f"""
-            以下の出身校名を検証し、必要に応じて訂正してください。
-            
-            出身校名: {school_name}
-            
-            以下の点を確認してください：
-            1. 学校名として妥当かどうか
-            2. 漢字の間違いがないか
-            3. 正式名称に訂正が必要かどうか
-            4. 留学生の場合は適切に処理する
-            
-            以下のJSON形式で回答してください：
-            {{
-                "status": "normal|abnormal|correction",
-                "reason": "理由の説明",
-                "corrected_name": "訂正後の学校名（訂正の場合のみ）"
-            }}
-            """
-            
-            response = self.model.generate_content(prompt)
-            result = response.text.strip()
-            
-            try:
-                # JSON形式の回答を解析
-                import json
-                data = json.loads(result)
-                
-                if data.get("status") == "abnormal":
-                    return {'is_valid': False, 'reason': f'AI検証: {data.get("reason", "異常な学校名です")}', 'correction': None}
-                elif data.get("status") == "correction":
-                    corrected_name = data.get("corrected_name", "")
-                    return {'is_valid': True, 'reason': f'AI検証: {data.get("reason", "訂正が必要です")}', 'correction': corrected_name}
-                else:
-                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
-            except (json.JSONDecodeError, KeyError):
-                # JSON解析に失敗した場合は従来の方法で判定
-                result_lower = result.lower()
-                if "異常" in result_lower or "abnormal" in result_lower:
-                    return {'is_valid': False, 'reason': f'AI検証: {result}', 'correction': None}
-                elif "訂正" in result_lower or "correction" in result_lower:
-                    # 訂正された学校名を抽出
-                    correction_match = re.search(r'訂正: (.+)', result)
-                    if correction_match:
-                        corrected_name = correction_match.group(1).strip()
-                        return {'is_valid': True, 'reason': f'AI検証: {result}', 'correction': corrected_name}
-                    else:
-                        return {'is_valid': True, 'reason': f'AI検証: {result}', 'correction': None}
-                else:
-                    return {'is_valid': True, 'reason': 'AI検証: 正常', 'correction': None}
-                
-        except Exception as e:
-            return {'is_valid': True, 'reason': f'Gemini API エラー: {str(e)}', 'correction': None}
+# AI機能は使用しないため削除
 
 class DataValidator:
-    """データ検証システム（改版）"""
+    """データ検証システム（AI機能なし）"""
     
     def __init__(self, gemini_api_key=None):
-        # Gemini API検証システム
-        self.gemini_validator = GeminiValidator(gemini_api_key)
+        # AI機能は使用しない
+        pass
     
     def validate_weight(self, weight):
-        """体重の妥当性をAIで評価（訂正はしない）"""
+        """体重の妥当性を評価（AI機能なし）"""
         if not weight:
             return True, []
         
-        # Gemini APIによる検証
-        ai_validation = self.gemini_validator.validate_weight_with_ai(weight)
-        if not ai_validation['is_valid']:
-            return False, [ai_validation['reason']]
-        
-        return True, []
+        # シンプルな範囲チェック
+        try:
+            weight_value = float(weight)
+            if 45 <= weight_value <= 140:
+                return True, []
+            else:
+                return False, [f"体重が範囲外です: {weight}kg (45-140kgの範囲で入力してください)"]
+        except (ValueError, TypeError):
+            return False, [f"体重が数値ではありません: {weight}"]
     
     def validate_and_correct_school(self, school_name):
-        """出身校の妥当性をAIで評価（訂正はしない）"""
+        """出身校の妥当性を評価（AI機能なし）"""
         if not school_name or school_name.strip() == "":
             return True, [], None
         
-        issues = []
+        # シンプルな文字列チェック
+        school_name = str(school_name).strip()
+        if len(school_name) < 2:
+            return False, ["学校名が短すぎます"], None
         
-        # Gemini APIによる出身校検証（訂正はしない）
-        ai_validation = self.gemini_validator.validate_and_correct_school_with_ai(school_name)
-        if not ai_validation['is_valid']:
-            issues.append(ai_validation['reason'])
-        
-        return len(issues) == 0, issues, None  # 訂正を返さない
+        return True, [], None
     
     def validate_uniform_number(self, uniform_number):
-        """背番号の妥当性をAIで評価（訂正はしない）"""
+        """背番号の妥当性を評価（AI機能なし）"""
         if not uniform_number:
             return True, []
         
@@ -916,7 +806,7 @@ class DataValidator:
             return False, ["背番号は数字である必要があります"]
     
     def validate_player_data(self, player_data):
-        """体重・出身校・背番号のみAI評価"""
+        """体重・出身校・背番号の検証（AI機能なし）"""
         all_issues = []
         
         # 体重の検証
@@ -1099,11 +989,11 @@ class FastCSVCorrectionSystem:
                 
                 # 元データの異常値をAIで検出（JBAにデータがない場合のみ）
                 if not jba_data.get('weight') and not jba_data.get('height'):
-                    validation_warnings = self._validate_player_data_with_ai(row, jba_data)
+                    validation_warnings = []  # AI機能は使用しない
                     result['validation_warnings'] = validation_warnings
             else:
                 # JBA登録なし・未発見の場合も警告をチェック
-                validation_warnings = self._validate_player_data_with_ai(row, {})
+                validation_warnings = []  # AI機能は使用しない
                 result['validation_warnings'] = validation_warnings
             
             return result
@@ -1512,8 +1402,7 @@ def main():
         # 内部設定（表示なし）
         threshold = 1.0  # 完全一致のみ
         get_details = True  # 常にオン
-        gemini_api_key = "AIzaSyBCX-rsrYsGbPCHrlWXdd2ECAxmbTqTJ34"  # 固定
-        use_ai_validation = True  # 常にオン
+        # AI機能は使用しない
         use_parallel_processing = True  # 並列処理を使用
         max_workers = 5  # 並列スレッド数
     
@@ -1530,11 +1419,11 @@ def main():
         if use_parallel_processing:
             st.session_state.csv_system = FastCSVCorrectionSystem(
                 st.session_state.jba_system, 
-                gemini_api_key if use_ai_validation else None,
+                None,  # AI機能は使用しない
                 max_workers=max_workers
             )
         else:
-            st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, gemini_api_key if use_ai_validation else None)
+            st.session_state.csv_system = CSVCorrectionSystem(st.session_state.jba_system, None)  # AI機能は使用しない
     else:
         st.session_state.csv_system = None
     
