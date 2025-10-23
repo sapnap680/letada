@@ -57,6 +57,7 @@ def main():
                 pass
         else:
             # JBAログイン情報を入力してください
+            pass
     
     # 処理開始ボタン
     if st.sidebar.button("🚀 処理開始", type="primary"):
