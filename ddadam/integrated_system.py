@@ -1013,6 +1013,7 @@ def main():
                                 st.dataframe(pd.DataFrame([r['original_data'] for r in match_results]))
                             else:
                                 # 完全一致のデータはありません
+                                pass
                         
                         with tab3:
                             partial_results = [r for r in report['results'] if r['status'] == 'partial_match']
@@ -1020,6 +1021,7 @@ def main():
                                 st.dataframe(pd.DataFrame([r['original_data'] for r in partial_results]))
                             else:
                                 # 部分一致のデータはありません
+                                pass
                         
                         with tab4:
                             not_found_results = [r for r in report['results'] if r['status'] == 'not_found']
@@ -1027,6 +1029,7 @@ def main():
                                 st.dataframe(pd.DataFrame([r['original_data'] for r in not_found_results]))
                             else:
                                 # 未発見のデータはありません
+                                pass
                         
                         # 全大学一括印刷レポート
                         st.subheader("🖨️ 全大学一括印刷レポート")

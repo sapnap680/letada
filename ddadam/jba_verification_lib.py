@@ -687,6 +687,7 @@ class JBAVerificationSystem:
                     break
                 else:
                     # チームが見つかりませんでした
+                    pass
             
             if not teams:
                 # 男子チームが見つかりませんでした
@@ -774,6 +775,7 @@ class JBAVerificationSystem:
                                 })
                 else:
                     # チームのメンバー情報が取得できませんでした
+                    pass
 
             # 完全一致を優先し、なければ部分一致を返す
             if all_matched_members:

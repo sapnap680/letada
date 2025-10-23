@@ -193,10 +193,13 @@ def main():
                                         pass
                     else:
                         # レポートの作成に失敗しました
+                        pass
                 else:
                     # JBA照合処理に失敗しました
+                    pass
             else:
                 # CSV取得に失敗しました
+                pass
             
         except Exception as e:
             # エラーが発生しました
