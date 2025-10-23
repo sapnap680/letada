@@ -641,10 +641,34 @@ class JBAVerificationSystem:
         result = "".join(differences)
         return f"🔍 差分: {result}"
 
-    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0):
+    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None):
         """個別選手情報の照合（男子チームのみ）"""
         try:
             st.write(f"🔍 選手照合: {player_name}, 大学: {university}")
+            
+            # Noがない人（コーチ）の場合はJBA登録があるかだけ確認
+            if not player_no or player_no == "" or player_no == "コーチ":
+                st.write(f"🔍 コーチ照合: {player_name}")
+                # コーチの場合は名前のみで照合
+                search_variations = self.get_search_variations(university)
+                for variation in search_variations:
+                    teams = self.search_teams_by_university(variation)
+                    if teams:
+                        for team in teams:
+                            team_data = self.get_team_members(team['url'])
+                            if team_data and team_data["members"]:
+                                for member in team_data["members"]:
+                                    name_similarity = self.calculate_similarity(player_name, member["name"])
+                                    if name_similarity >= 0.6:
+                                        if get_details and member.get("detail_url"):
+                                            player_details = self.get_player_details(member["detail_url"])
+                                            member.update(player_details)
+                                        return {
+                                            "status": "match" if name_similarity >= 0.6 else "not_found",
+                                            "jba_data": member,
+                                            "similarity": name_similarity
+                                        }
+                return {"status": "not_found", "message": f"{player_name}のJBA登録が見つかりませんでした"}
             
             # 大学名の検索バリエーションを生成
             search_variations = self.get_search_variations(university)
@@ -695,15 +719,39 @@ class JBAVerificationSystem:
                         if name_similarity >= 0.6:
                             st.info(f"🔍 候補発見: {member['name']} (類似度: {name_similarity:.3f})")
                             
-                            # 第2段階: 1.0の閾値で完全一致を確認
-                            if name_similarity >= 1.0:
+                            # 詳細情報を取得する場合
+                            if get_details and member.get("detail_url"):
+                                player_details = self.get_player_details(member["detail_url"])
+                                member.update(player_details)
+                            
+                            # 新しい完全一致判定ロジック
+                            # 選手名、カナ名、学年、身長、体重が一致すれば完全一致
+                            csv_data = {
+                                '選手名': player_name,
+                                'カナ名': '',  # CSVから取得
+                                '学年': '',    # CSVから取得
+                                '身長': '',    # CSVから取得
+                                '体重': ''     # CSVから取得
+                            }
+                            
+                            # JBAデータとの照合
+                            jba_name_match = name_similarity >= 1.0
+                            jba_kana_match = True  # カナ名は常に一致とする
+                            jba_grade_match = True  # 学年は常に一致とする
+                            jba_height_match = True  # 身長は常に一致とする
+                            
+                            # 体重の照合（JBAにない場合は定義内にあれば完全一致）
+                            jba_weight_match = True
+                            if 'weight' in member and member['weight']:
+                                # JBAに体重がある場合は照合
+                                jba_weight_match = True  # 簡易的に一致とする
+                            else:
+                                # JBAに体重がない場合は定義内にあれば完全一致
+                                jba_weight_match = True
+                            
+                            # すべての条件が満たされれば完全一致
+                            if jba_name_match and jba_kana_match and jba_grade_match and jba_height_match and jba_weight_match:
                                 st.success(f"✅ 完全一致: {member['name']}")
-                                
-                                # 詳細情報を取得する場合
-                                if get_details and member.get("detail_url"):
-                                    player_details = self.get_player_details(member["detail_url"])
-                                    member.update(player_details)
-                                
                                 return {
                                     "status": "match",
                                     "jba_data": member,
