@@ -29,27 +29,64 @@ def main():
     st.sidebar.subheader("🏀 大会設定")
     game_id = st.sidebar.number_input("大会ID", value=76, min_value=1)
     
+    # 並列処理設定
+    st.sidebar.subheader("⚡ 並列処理設定")
+    max_workers = st.sidebar.slider("並列スレッド数", min_value=1, max_value=20, value=10, help="スレッド数を増やすと高速化されますが、サーバー負荷が高くなります")
+    use_parallel = st.sidebar.checkbox("並列処理を使用", value=True, help="チェックを外すと従来の順次処理になります")
+    
+    # JBAログイン情報
+    st.sidebar.subheader("🔐 JBAログイン情報")
+    jba_email = st.sidebar.text_input("JBAメールアドレス", value="")
+    jba_password = st.sidebar.text_input("JBAパスワード", value="", type="password")
+    
+    # JBAログインボタン
+    if st.sidebar.button("🔐 JBAにログイン", type="secondary"):
+        if jba_email and jba_password:
+            try:
+                jba_system = JBAVerificationSystem()
+                if jba_system.login(jba_email, jba_password):
+                    st.session_state.jba_logged_in = True
+                    st.session_state.jba_system = jba_system
+                    st.success("✅ JBAログイン成功")
+                else:
+                    st.error("❌ JBAログイン失敗")
+            except Exception as e:
+                st.error(f"❌ JBAログインエラー: {str(e)}")
+        else:
+            st.error("❌ JBAログイン情報を入力してください")
+    
     # 処理開始ボタン
     if st.sidebar.button("🚀 処理開始", type="primary"):
         try:
+            # JBAログイン状態をチェック
+            if not st.session_state.get('jba_logged_in', False):
+                st.error("❌ 先にJBAにログインしてください")
+                return
+            
             st.info("🔄 システムを初期化中...")
             
             # システム初期化
-            jba_system = JBAVerificationSystem()
+            jba_system = st.session_state.jba_system
             validator = DataValidator()
             
             st.success("✅ システム初期化完了")
             
             # 統合システムの処理
             st.info("📝 統合システムを実行中...")
-            st.write(f"ログインID: {username}")
-            st.write(f"パスワード: {'*' * len(password)}")
-            st.write(f"大会ID: {game_id}")
+            
+            # 設定情報をコンパクトに表示
+            with st.expander("⚙️ 実行設定", expanded=False):
+                st.write(f"ログインID: {username}")
+                st.write(f"パスワード: {'*' * len(password)}")
+                st.write(f"大会ID: {game_id}")
+                st.write(f"並列処理: {'ON' if use_parallel else 'OFF'}")
+                st.write(f"スレッド数: {max_workers}")
             
             # 統合システムのインポートと実行
             from integrated_system import IntegratedTournamentSystem
             
-            integrated_system = IntegratedTournamentSystem(jba_system, validator)
+            # 並列処理設定を渡す
+            integrated_system = IntegratedTournamentSystem(jba_system, validator, max_workers=max_workers, use_parallel=use_parallel)
             
             # ステップ1: CSV取得
             st.header("📥 ステップ1: 大会CSV取得")

@@ -22,10 +22,12 @@ from jba_verification_lib import JBAVerificationSystem, FastCSVCorrectionSystem,
 class IntegratedTournamentSystem:
     """大会IDからJBA照合まで一括処理する統合システム"""
     
-    def __init__(self, jba_system, validator):
+    def __init__(self, jba_system, validator, max_workers=10, use_parallel=True):
         self.jba_system = jba_system
         self.validator = validator
         self.base_url = "https://www.kcbbf.jp"
+        self.max_workers = max_workers
+        self.use_parallel = use_parallel
         
     def login_and_get_tournament_csvs(self, username, password, game_id):
         """ログインして大会の全CSVを取得"""
@@ -123,8 +125,15 @@ class IntegratedTournamentSystem:
                     csv_response = session.get(csv_url, timeout=30)
                     csv_response.raise_for_status()
                     
-                    # CSVをDataFrameに変換
-                    df = pd.read_csv(StringIO(csv_response.text))
+                    # CSVをDataFrameに変換（日本語対応）
+                    csv_text = csv_response.text
+                    # エンコーディングを試行
+                    try:
+                        df = pd.read_csv(StringIO(csv_text))
+                    except UnicodeDecodeError:
+                        # UTF-8で失敗した場合はShift_JISを試行
+                        csv_text = csv_response.content.decode('shift_jis')
+                        df = pd.read_csv(StringIO(csv_text))
                     
                     # 大学名を取得
                     content_disposition = csv_response.headers.get("content-disposition", "")
@@ -164,12 +173,21 @@ class IntegratedTournamentSystem:
             return None
     
     def process_tournament_data(self, df, university_name=None):
-        """大会データをJBA照合で処理"""
+        """大会データをJBA照合で処理（並列処理対応）"""
         
         if df is None or df.empty:
             st.error("❌ 処理するデータがありません")
             return None
         
+        if self.use_parallel:
+            st.info(f"⚡ 並列処理を使用（{self.max_workers}スレッド）")
+            return self._process_tournament_data_parallel(df, university_name)
+        else:
+            st.info("🔄 順次処理を使用")
+            return self._process_tournament_data_sequential(df, university_name)
+    
+    def _process_tournament_data_sequential(self, df, university_name=None):
+        """順次処理でJBA照合"""
         st.info("🔍 JBA照合処理を開始...")
         
         # 大学ごとに処理
@@ -290,7 +308,101 @@ class IntegratedTournamentSystem:
             
             all_results.extend(results)
         
+        # 結果をコンパクトに表示
+        with st.expander("📊 処理結果詳細", expanded=False):
+            st.metric("処理選手数", len(all_results))
+            st.metric("処理大学数", len(universities))
+        
         return all_results
+    
+    def _process_tournament_data_parallel(self, df, university_name=None):
+        """並列処理でJBA照合"""
+        import concurrent.futures
+        import time
+        
+        st.info("🔍 JBA照合処理を開始（並列処理）...")
+        
+        # 大学ごとに処理
+        universities = df['大学名'].unique() if '大学名' in df.columns else [university_name or "Unknown"]
+        
+        all_results = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        start_time = time.time()
+        total_players = len(df)
+        processed = 0
+        
+        # 全選手のデータを準備
+        player_data = []
+        for univ in universities:
+            if '大学名' in df.columns:
+                univ_data = df[df['大学名'] == univ].copy()
+            else:
+                univ_data = df.copy()
+            
+            for index, row in univ_data.iterrows():
+                player_name = None
+                name_columns = ['選手名', '氏名', 'name', 'Name']
+                
+                for col in name_columns:
+                    if col in univ_data.columns and pd.notna(row[col]):
+                        player_name = str(row[col]).strip()
+                        break
+                
+                if player_name:
+                    player_data.append((index, row, univ, player_name))
+        
+        # 並列処理でJBA照合
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = []
+            
+            for index, row, univ, player_name in player_data:
+                future = executor.submit(self._process_single_player_parallel, 
+                                       index, row, univ, player_name)
+                futures.append(future)
+            
+            # 結果を収集
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    all_results.append(result)
+                    processed += 1
+                    
+                    # 進捗更新（10選手ごと）
+                    if processed % 10 == 0 or processed == total_players:
+                        progress = processed / total_players
+                        progress_bar.progress(progress)
+                        status_text.text(f"処理中: {processed}/{total_players} - {result['original_data'].get('選手名', 'Unknown')}")
+                    
+                except Exception as e:
+                    st.error(f"❌ 並列処理エラー: {str(e)}")
+        
+        elapsed_time = time.time() - start_time
+        
+        # 結果をコンパクトに表示
+        with st.expander("📊 処理結果詳細", expanded=False):
+            st.metric("処理時間", f"{elapsed_time:.2f}秒")
+            st.metric("平均処理時間", f"{elapsed_time/processed:.2f}秒/選手")
+            st.metric("処理速度", f"{processed/elapsed_time:.1f}選手/秒")
+        
+        st.success(f"✅ 並列処理完了: {processed}選手を{elapsed_time:.2f}秒で処理")
+        
+        return all_results
+    
+    def _process_single_player_parallel(self, index, row, univ, player_name):
+        """単一選手の並列処理"""
+        # JBA照合
+        verification_result = self.jba_system.verify_player_info(
+            player_name, None, univ, get_details=True, threshold=1.0
+        )
+        
+        return {
+            'index': index,
+            'original_data': row.to_dict(),
+            'verification_result': verification_result,
+            'status': verification_result['status']
+        }
     
     def create_university_reports(self, results):
         """大学ごとのレポートを作成"""
@@ -546,6 +658,95 @@ class IntegratedTournamentSystem:
         """
         
         return html_content
+    
+    def display_university_report(self, selected_univ, report, game_id, reports):
+        """大学別レポートを表示"""
+        st.markdown(f"### {selected_univ} レポート")
+        
+        # 統計情報
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric("総選手数", report['total_players'])
+        with col2:
+            st.metric("完全一致", report['match_count'])
+        with col3:
+            st.metric("部分一致", report['partial_match_count'])
+        with col4:
+            st.metric("未発見", report['not_found_count'])
+        with col5:
+            st.metric("一致率", f"{report['match_rate']:.1f}%")
+        
+        # タブ表示
+        tab1, tab2, tab3, tab4 = st.tabs(["全詳細", "完全一致", "部分一致", "未発見"])
+        
+        with tab1:
+            st.subheader("全選手データ")
+            if report['results']:
+                df_all = pd.DataFrame([r['original_data'] for r in report['results']])
+                st.dataframe(df_all)
+            else:
+                st.info("データがありません")
+        
+        with tab2:
+            st.subheader("完全一致選手")
+            match_results = [r for r in report['results'] if r['status'] == 'match']
+            if match_results:
+                df_match = pd.DataFrame([r['original_data'] for r in match_results])
+                st.dataframe(df_match)
+            else:
+                st.info("完全一致の選手はありません")
+        
+        with tab3:
+            st.subheader("部分一致選手")
+            partial_results = [r for r in report['results'] if r['status'] == 'partial_match']
+            if partial_results:
+                df_partial = pd.DataFrame([r['original_data'] for r in partial_results])
+                st.dataframe(df_partial)
+            else:
+                st.info("部分一致の選手はありません")
+        
+        with tab4:
+            st.subheader("未発見選手")
+            not_found_results = [r for r in report['results'] if r['status'] == 'not_found']
+            if not_found_results:
+                df_not_found = pd.DataFrame([r['original_data'] for r in not_found_results])
+                st.dataframe(df_not_found)
+            else:
+                st.info("未発見の選手はありません")
+        
+        # 全大学一括印刷レポート
+        st.subheader("🖨️ 全大学一括印刷レポート")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📄 選択大学のレポートを生成"):
+                # 選択された大学のレポートを生成
+                html_content = self._generate_university_report(selected_univ, report)
+                
+                st.download_button(
+                    label="📄 HTMLレポートをダウンロード",
+                    data=html_content,
+                    file_name=f"{selected_univ}_選手データ.html",
+                    mime="text/html"
+                )
+        
+        with col2:
+            if st.button("📚 全大学一括レポートを生成", type="primary"):
+                # 全大学のレポートを生成
+                st.info("📚 全大学のレポートを生成中...")
+                
+                html_content = self._generate_all_universities_report(reports)
+                
+                st.download_button(
+                    label="📚 全大学一括HTMLレポートをダウンロード",
+                    data=html_content,
+                    file_name=f"大会ID{game_id}_全大学選手データ.html",
+                    mime="text/html"
+                )
+                
+                st.success("✅ 全大学のレポートが生成されました！")
 
 def main():
     """メイン処理"""
