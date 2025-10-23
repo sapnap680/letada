@@ -138,18 +138,53 @@ def main():
                                         st.error(f"❌ PDF生成エラー: {str(e)}")
                             
                             with col2:
-                                if st.button("📚 全大学PDFを生成", type="primary"):
+                                # 全大学PDF生成（非同期）
+                                st.subheader("🖨️ 全大学PDF（非同期）")
+                                if st.button("📚 全大学PDFを生成（バックグラウンド）", type="primary"):
                                     try:
-                                        pdf_path = integrated_system.export_all_university_reports_as_pdf(reports)
-                                        with open(pdf_path, "rb") as f:
-                                            st.download_button(
-                                                label="📚 全大学PDFをダウンロード",
-                                                data=f.read(),
-                                                file_name=f"大会ID{game_id}_全大学選手データ.pdf",
-                                                mime="application/pdf"
-                                            )
+                                        # ジョブを開始して job_meta_path を返す
+                                        job_meta_path = integrated_system.start_pdf_generation_background(
+                                            reports,
+                                            output_filename=os.path.join(integrated_system.temp_dir, f"大会ID{game_id}_全大学選手データ.pdf")
+                                        )
+                                        st.session_state['pdf_job_meta'] = job_meta_path
+                                        st.success("PDF生成ジョブを開始しました。完了後にダウンロードリンクが表示されます。")
                                     except Exception as e:
-                                        st.error(f"❌ PDF生成エラー: {str(e)}")
+                                        st.error(f"❌ PDF生成ジョブ開始エラー: {str(e)}")
+
+                                # 進捗表示・ダウンロード
+                                job_meta_path = st.session_state.get('pdf_job_meta')
+                                if job_meta_path and os.path.exists(job_meta_path):
+                                    try:
+                                        with open(job_meta_path, "r", encoding="utf-8") as f:
+                                            meta = json.load(f)
+                                        status = meta.get("status", "unknown")
+                                        progress = meta.get("progress", 0.0)
+                                        message = meta.get("message", "")
+                                        output_path = meta.get("output_path")
+                                        error = meta.get("error")
+
+                                        st.info(f"ジョブ: {meta.get('job_id')} 状態: {status} 進捗: {progress*100:.1f}%")
+                                        st.progress(progress)
+
+                                        if status == "done" and output_path and os.path.exists(output_path):
+                                            with open(output_path, "rb") as pdf_file:
+                                                st.download_button(
+                                                    label="📚 完了したPDFをダウンロード",
+                                                    data=pdf_file.read(),
+                                                    file_name=os.path.basename(output_path),
+                                                    mime="application/pdf"
+                                                )
+                                        elif status == "error":
+                                            st.error(f"PDF生成エラー: {message}")
+                                            if error:
+                                                st.text(error)
+                                        else:
+                                            # 更新用ボタン（手動で最新状態に）
+                                            if st.button("🔁 更新"):
+                                                st.rerun()
+                                    except Exception as e:
+                                        st.error(f"ジョブメタの読み込みに失敗しました: {str(e)}")
                     else:
                         st.error("❌ レポートの作成に失敗しました")
                 else:
