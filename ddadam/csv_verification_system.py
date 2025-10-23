@@ -1121,38 +1121,18 @@ class FastCSVCorrectionSystem:
             }
     
     def _validate_player_data_with_ai(self, row, jba_data):
-        """元データの異常値をAIで検出（JBAに記載がない場合のみ）"""
+        """元データの異常値を検出（JBAに記載がない場合のみ）"""
         warnings = []
         
-        # 体重：JBAに記載がない場合のみAIで検証
+        # 体重：JBAに記載がない場合のみ許容範囲でチェック
         if not jba_data.get('weight') and pd.notna(row.get('体重')):
             weight = row.get('体重')
             try:
                 weight_value = float(weight)
-                weight_validation = self.validator.gemini_validator.validate_weight_with_ai(weight_value)
-                if not weight_validation['is_valid']:
-                    warnings.append(weight_validation['reason'])
+                if weight_value < 45 or weight_value > 140:
+                    warnings.append(f"⚠️ 体重が許容範囲外: {weight_value}kg (許容範囲: 45-140kg)")
             except (ValueError, TypeError):
                 warnings.append(f"⚠️ 体重が数値ではない: {weight}")
-        
-        # 出身校：常にAIで検証（JBAには出身校情報が記載されていないため）
-        if pd.notna(row.get('出身校')):
-            school = row.get('出身校')
-            print(f"DEBUG: checking school = {school}")
-            if school and str(school).strip() != "":
-                try:
-                    print(f"DEBUG: calling validate_and_correct_school_with_ai with '{str(school).strip()}'")
-                    school_validation = self.validator.gemini_validator.validate_and_correct_school_with_ai(str(school).strip())
-                    print(f"DEBUG: school_validation = {school_validation}")
-                    if not school_validation['is_valid']:
-                        warnings.append(school_validation['reason'])
-                except Exception as e:
-                    warnings.append(f"⚠️ 出身校の検証エラー: {str(e)}")
-                    print(f"DEBUG: school validation exception: {e}")
-        else:
-            print(f"DEBUG: skipping school validation - csv_school={row.get('出身校')}")
-        
-        # 身長はJBAに必ず記載されているのでAI検証不要
         
         return warnings
     
