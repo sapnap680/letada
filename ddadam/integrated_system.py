@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 import getpass
 from datetime import datetime
 import json
+from io import StringIO
 
 # 既存のJBA検証システムのインポート
 import sys
@@ -99,6 +100,14 @@ class IntegratedTournamentSystem:
             
             if not csv_links:
                 st.warning("⚠️ CSVリンクが見つかりませんでした")
+                st.info("🔍 デバッグ情報:")
+                st.write(f"アクセスURL: {target_url}")
+                st.write(f"レスポンスステータス: {response.status_code}")
+                
+                # ページの内容を一部表示
+                page_content = response.text[:1000]  # 最初の1000文字
+                st.code(f"ページ内容（最初の1000文字）:\n{page_content}")
+                
                 return None
             
             # CSVを取得してDataFrameに変換
@@ -115,7 +124,7 @@ class IntegratedTournamentSystem:
                     csv_response.raise_for_status()
                     
                     # CSVをDataFrameに変換
-                    df = pd.read_csv(pd.StringIO(csv_response.text))
+                    df = pd.read_csv(StringIO(csv_response.text))
                     
                     # 大学名を取得
                     content_disposition = csv_response.headers.get("content-disposition", "")
