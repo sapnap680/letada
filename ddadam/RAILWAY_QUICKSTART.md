@@ -186,7 +186,27 @@ curl https://YOUR-RAILWAY-URL.up.railway.app/health
 
 ## 🐛 よくあるエラー
 
-### エラー 1: Backend が起動しない
+**詳細なトラブルシューティング: [DEPLOYMENT_TROUBLESHOOTING.md](./DEPLOYMENT_TROUBLESHOOTING.md)**
+
+### エラー 1: 依存関係の競合
+
+```
+ERROR: Cannot install httpx==0.26.0 and supabase==2.3.4
+```
+
+**解決済み（2025-10-27）:**
+`requirements.txt` で `httpx==0.25.2` に修正済み
+
+**確認方法:**
+```bash
+cd backend
+pip install -r requirements.txt
+# エラーが出なければ OK
+```
+
+---
+
+### エラー 2: Backend が起動しない
 
 ```
 Error: Application startup failed

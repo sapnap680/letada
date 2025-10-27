@@ -2,12 +2,12 @@
 # FastAPI + 依存ライブラリ
 
 # Web Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+fastapi>=0.109.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+python-multipart>=0.0.6
 
 # HTTP Client
-httpx==0.26.0
+httpx==0.25.2  # supabase 2.3.4 requires httpx<0.26
 requests==2.31.0
 
 # Data Processing
@@ -22,12 +22,12 @@ beautifulsoup4==4.12.3
 lxml==5.1.0
 
 # Settings Management
-pydantic==2.6.0
-pydantic-settings==2.1.0
+pydantic>=2.6.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
 
 # Supabase (Storage + Postgres)
-supabase==2.3.4
-postgrest==0.13.0
+supabase>=2.3.4,<3.0.0  # 柔軟なバージョン指定
+postgrest>=0.13.0,<1.0.0
 
 # Redis (Upstash 対応)
 redis==5.0.1

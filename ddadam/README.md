@@ -314,6 +314,8 @@ GET /cache
 
 詳細な手順は **[DEPLOY_RAILWAY.md](./DEPLOY_RAILWAY.md)** を参照してください。
 
+**トラブルシューティング:** [DEPLOYMENT_TROUBLESHOOTING.md](./DEPLOYMENT_TROUBLESHOOTING.md)
+
 ### クイックスタート
 
 1. **Supabase**
