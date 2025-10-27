@@ -32,7 +32,9 @@ export default function Home() {
     }
 
     try {
+      // 環境変数から API URL を取得（デフォルト: localhost）
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      console.log("API URL:", apiUrl); // デバッグ用
       const res = await fetch(`${apiUrl}/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
