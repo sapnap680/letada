@@ -135,3 +135,4 @@ def pdf_worker_main(reports, output_path, job_meta_path, max_rows_per_page=100):
         tb = traceback.format_exc()
         print("PDF worker crashed:", e)
         _write_job_meta(job_meta_path, status="error", progress=0.0, message=str(e), error=tb)
+

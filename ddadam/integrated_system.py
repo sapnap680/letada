@@ -1066,10 +1066,13 @@ def main():
                 
                 else:
                     # レポートの作成に失敗しました
+                    pass
             else:
                 # JBA照合処理に失敗しました
+                pass
         else:
             # CSV取得に失敗しました
+            pass
     
     def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf", max_rows_per_page=100):
         """全大学レポートをコンパクトなPDFで出力（画像の形式に準拠）"""
