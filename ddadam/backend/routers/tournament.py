@@ -36,36 +36,14 @@ def run_tournament_job(
     logger.info(f"🔍 Thread ID: {threading.current_thread().ident}")
     logger.info(f"🔍 Process ID: {os.getpid()}")
     logger.info(f"🔍 現在時刻: {datetime.now().isoformat()}")
-    
     from worker.integrated_system import IntegratedTournamentSystem
     from config import settings
-    
-    job_file = f"temp_results/job_{job_id}.json"
-    
-    # ジョブファイルを読み込み（エンドポイント内で既に作成済み）
-    try:
-        with open(job_file, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-        logger.info(f"✅ 既存ジョブファイル読み込み: {job_file}")
-    except Exception as e:
-        logger.error(f"❌ ジョブファイル読み込み失敗: {e}")
-        # フォールバック: 新規作成
-        meta = {
-            "job_id": job_id,
-            "status": "queued",
-            "progress": 0.0,
-            "message": "ジョブを開始しています...",
-            "game_id": game_id
-        }
+    supabase = get_supabase_helper()
     
     try:
-        # ジョブ開始
-        meta["status"] = "processing"
-        meta["message"] = "大会CSVを取得中..."
-        meta["updated_at"] = datetime.now().isoformat()
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        
+        # ジョブ開始（Supabase）
+        supabase.update_job(job_id, status="processing", progress=0.0, message="大会CSVを取得中...")
+
         # JBAシステム初期化（選手検索用）
         from worker.jba_verification_lib import JBAVerificationSystem, DataValidator
         
@@ -86,10 +64,7 @@ def run_tournament_job(
         )
         
         # 管理画面ログインしてCSV取得（環境変数から認証情報を取得）
-        meta["message"] = f"大会ID {game_id} のCSVを取得中..."
-        meta["progress"] = 0.1
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+        supabase.update_job(job_id, message=f"大会ID {game_id} のCSVを取得中...", progress=0.1)
         
         logger.info(f"管理画面ログイン: {settings.admin_username}")
         
@@ -104,17 +79,12 @@ def run_tournament_job(
         
         # 取得した大学数を記録
         universities = combined_df['大学名'].unique().tolist()
-        meta["universities"] = universities
-        meta["total_universities"] = len(universities)
-        meta["total_rows"] = len(combined_df)
+        supabase.update_job(job_id, metadata={"universities": universities, "total_universities": len(universities), "total_rows": len(combined_df)})
         
         logger.info(f"✅ 大会データ取得完了: {len(universities)}大学, {len(combined_df)}行")
         
         # JBA照合処理
-        meta["message"] = f"JBA照合処理中...（{len(universities)}大学）"
-        meta["progress"] = 0.3
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+        supabase.update_job(job_id, message=f"JBA照合処理中...（{len(universities)}大学）", progress=0.3)
         
         result_df = system.process_tournament_data(combined_df)
         
@@ -122,10 +92,7 @@ def run_tournament_job(
             raise Exception("JBA照合処理に失敗しました")
         
         # PDF生成
-        meta["message"] = "PDFを生成中..."
-        meta["progress"] = 0.7
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+        supabase.update_job(job_id, message="PDFを生成中...", progress=0.7)
         
         output_dir = "outputs"
         os.makedirs(output_dir, exist_ok=True)
@@ -140,41 +107,36 @@ def run_tournament_job(
         )
         
         logger.info(f"✅ PDF生成完了: {pdf_path}")
-        
+
+        # Supabase Storage にアップロード（ヘルパーにアップロード関数がある場合）
+        public_url = None
+        try:
+            public_url = supabase.upload_file(pdf_path, f"reports/{pdf_filename}")
+        except Exception as _:
+            public_url = None
+
         # 完了
-        meta["status"] = "done"
-        meta["progress"] = 1.0
-        meta["message"] = f"処理が完了しました（{len(universities)}大学）"
-        meta["output_path"] = pdf_path
-        meta["output_filename"] = pdf_filename
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        
+        supabase.update_job(
+            job_id,
+            status="done",
+            progress=1.0,
+            message=f"処理が完了しました（{len(universities)}大学）",
+            output_path=public_url or pdf_path,
+        )
         logger.info(f"✅ 大会ジョブ完了: {job_id}")
         
     except Exception as e:
         logger.error(f"❌ 大会ジョブエラー: {str(e)}", exc_info=True)
-        
-        # エラー詳細を取得
         import traceback
         error_traceback = traceback.format_exc()
-        
-        meta = {
-            "job_id": job_id,
-            "status": "error",
-            "progress": 0.0,
-            "message": "エラーが発生しました",
-            "error": str(e),
-            "error_detail": error_traceback,
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        try:
-            with open(job_file, "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=2)
-        except Exception as write_error:
-            logger.error(f"❌ エラーファイル書き込み失敗: {write_error}")
+        supabase.update_job(
+            job_id,
+            status="error",
+            progress=0.0,
+            message="エラーが発生しました",
+            error=str(e),
+            error_detail=error_traceback,
+        )
 
 
 @router.post("/", response_model=TournamentResponse, include_in_schema=True)
