@@ -82,6 +82,19 @@ class IntegratedTournamentSystem:
     def _register_japanese_fonts(self):
         """日本語フォントを登録"""
         try:
+            # TTCフォントを堅牢に登録するヘルパー
+            def _try_register_ttc(font_name_base: str, ttc_path: str, max_index: int = 8) -> str:
+                """.ttc のサブフォントを順に試す。成功したフォント名を返す（失敗時は空文字）。"""
+                from reportlab.pdfbase.ttfonts import TTFont
+                for i in range(max_index):
+                    try:
+                        candidate_name = f"{font_name_base}-{i}"
+                        pdfmetrics.registerFont(TTFont(candidate_name, ttc_path, subfontIndex=i))
+                        return candidate_name
+                    except Exception:
+                        continue
+                return ""
+
             # Windowsの場合
             if platform.system() == "Windows":
                 # MS ゴシック
@@ -113,27 +126,44 @@ class IntegratedTournamentSystem:
             # Linux/Macの場合
             else:
                 # Linux環境での日本語フォント対応
-                font_paths = [
+                font_paths_ttc = [
                     '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+                    '/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc',
                     '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+                    '/usr/share/fonts/truetype/noto/NotoSerifCJK-Regular.ttc'
+                ]
+                font_paths_ttf_otf = [
+                    '/usr/share/fonts/truetype/noto/NotoSansCJKjp-Regular.otf',
+                    '/usr/share/fonts/truetype/noto/NotoSerifCJKjp-Regular.otf',
                     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
                     '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-                    '/System/Library/Fonts/Helvetica.ttc',  # macOS
-                    '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf'
                 ]
                 
                 font_registered = False
-                for font_path in font_paths:
-                    if os.path.exists(font_path):
-                        try:
-                            pdfmetrics.registerFont(TTFont('JapaneseFont', font_path))
-                            self.default_font = 'JapaneseFont'
-                            print(f"✅ 日本語フォント登録成功: {font_path}")
+                # まず .ttc をサブフォント含めて試す
+                for ttc_path in font_paths_ttc:
+                    if os.path.exists(ttc_path):
+                        name = _try_register_ttc('NotoCJK', ttc_path, max_index=16)
+                        if name:
+                            self.default_font = name
+                            print(f"✅ 日本語フォント登録成功 (TTC): {ttc_path} -> {name}")
                             font_registered = True
                             break
-                        except Exception as e:
-                            print(f"⚠️ フォント登録失敗 {font_path}: {e}")
-                            continue
+                        else:
+                            print(f"⚠️ TTC登録失敗: {ttc_path}")
+                # つぎに単一フォントファイルを試す
+                if not font_registered:
+                    for font_path in font_paths_ttf_otf:
+                        if os.path.exists(font_path):
+                            try:
+                                pdfmetrics.registerFont(TTFont('NotoCJK', font_path))
+                                self.default_font = 'NotoCJK'
+                                print(f"✅ 日本語フォント登録成功: {font_path}")
+                                font_registered = True
+                                break
+                            except Exception as e:
+                                print(f"⚠️ フォント登録失敗 {font_path}: {e}")
+                                continue
                 
                 # フォント登録に失敗した場合は、ReportLabのデフォルトフォントを使用
                 if not font_registered:
