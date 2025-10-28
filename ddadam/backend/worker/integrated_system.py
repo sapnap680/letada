@@ -88,25 +88,31 @@ class IntegratedTournamentSystem:
                 try:
                     TTFont('MS-Gothic', 'C:/Windows/Fonts/msgothic.ttc')
                     pdfmetrics.registerFont(TTFont('MS-Gothic', 'C:/Windows/Fonts/msgothic.ttc'))
+                    self.default_font = 'MS-Gothic'
                 except:
                     pass
                 # MS 明朝
                 try:
                     TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc')
                     pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                    if not hasattr(self, 'default_font'):
+                        self.default_font = 'MS-Mincho'
                 except:
                     pass
                 # メイリオ
                 try:
                     TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc')
                     pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                    if not hasattr(self, 'default_font'):
+                        self.default_font = 'Meiryo'
                 except:
                     pass
             else:
                 # Linux/Macの場合（デフォルトフォントを使用）
-                pass
+                self.default_font = 'Helvetica'
         except Exception as e:
             print(f"⚠️ 日本語フォント登録エラー: {str(e)}")
+            self.default_font = 'Helvetica'
     
     def _truncate_text(self, text, max_chars=15):
         """テキストを指定文字数で切り詰め"""
@@ -278,21 +284,40 @@ class IntegratedTournamentSystem:
                     csv_response.raise_for_status()
                     
                     # CSVをDataFrameに変換（日本語対応）
+                    # まずはレスポンスのエンコーディングを確認
+                    response_encoding = csv_response.encoding or 'utf-8'
                     csv_text = csv_response.text
+                    
                     # エンコーディングを試行
                     try:
                         df = pd.read_csv(StringIO(csv_text))
                     except UnicodeDecodeError:
                         # UTF-8で失敗した場合はShift_JISを試行
-                        csv_text = csv_response.content.decode('shift_jis')
-                        df = pd.read_csv(StringIO(csv_text))
+                        try:
+                            csv_text = csv_response.content.decode('shift_jis')
+                            df = pd.read_csv(StringIO(csv_text))
+                        except UnicodeDecodeError:
+                            # Shift_JISでも失敗した場合はcp932を試行
+                            csv_text = csv_response.content.decode('cp932')
+                            df = pd.read_csv(StringIO(csv_text))
                     
-                    # 大学名を取得
+                    # 大学名を取得（文字エンコーディング対応）
                     content_disposition = csv_response.headers.get("content-disposition", "")
                     filename_match = re.search(r'filename="(.+)"', content_disposition)
                     
                     if filename_match:
+                        # 文字エンコーディングを修正
                         university_name = filename_match.group(1).replace('.csv', '')
+                        try:
+                            # URLデコードしてからUTF-8でデコード
+                            import urllib.parse
+                            university_name = urllib.parse.unquote(university_name)
+                            # さらにISO-8859-1からUTF-8に変換を試行
+                            if '\\' in university_name:
+                                university_name = university_name.encode('latin-1').decode('utf-8')
+                        except:
+                            # エンコーディング変換に失敗した場合はそのまま使用
+                            pass
                     else:
                         university_name = f"大学_{i+1}"
                     
@@ -893,11 +918,6 @@ class IntegratedTournamentSystem:
         # Streamlit UI 削除済み: 何もしない
         return None
 
-def main():
-    """メイン処理"""
-    # CLI/Streamlit UI は削除済み
-    return
-    
     def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf", max_rows_per_page=100):
         """全大学レポートをコンパクトなPDFで出力（画像の形式に準拠）"""
         # A4縦向きで作成
@@ -913,7 +933,7 @@ def main():
             parent=styles['Normal'],
             fontSize=6,
             leading=6,  # 行間をさらに縮小
-            fontName='MS-Gothic'
+            fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
         title_style = ParagraphStyle(
@@ -921,7 +941,7 @@ def main():
             parent=styles['Title'],
             fontSize=8,
             leading=9,  # 行間をさらに縮小
-            fontName='MS-Gothic'
+            fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
         # ヘッダー情報（最小限）
@@ -1023,12 +1043,12 @@ def main():
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),  # 上揃えに変更
-                ("FONTNAME", (0, 0), (-1, 0), "MS-Gothic"),
+                ("FONTNAME", (0, 0), (-1, 0), getattr(self, 'default_font', 'MS-Gothic')),
                 ("FONTSIZE", (0, 0), (-1, 0), 5),  # ヘッダーフォントサイズ（final_100_outputと同じ）
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 2),  # ヘッダーパディング（final_100_outputと同じ）
                 
                 # データ行
-                ("FONTNAME", (0, 1), (-1, -1), "MS-Gothic"),
+                ("FONTNAME", (0, 1), (-1, -1), getattr(self, 'default_font', 'MS-Gothic')),
                 ("FONTSIZE", (0, 1), (-1, -1), 4),  # データフォントサイズ（final_100_outputと同じ）
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
                 
@@ -1250,6 +1270,12 @@ def main():
                 logger.error(f"❌ PDF生成エラー ({univ}): {e}")
 
         return pdf_files
+
+
+def main():
+    """メイン処理"""
+    # CLI/Streamlit UI は削除済み
+    return
 
 if __name__ == "__main__":
     main()
