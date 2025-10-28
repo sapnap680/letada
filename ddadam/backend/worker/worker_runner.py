@@ -77,6 +77,8 @@ class JobWorker:
                 self.process_pdf_job(job)
             elif job_type == 'verification':
                 self.process_verification_job(job)
+            elif job_type == 'tournament':
+                self.process_tournament_job(job)
             else:
                 logger.warning(f"Unknown job type: {job_type}")
                 self.supabase.update_job(
@@ -192,6 +194,34 @@ class JobWorker:
         
         except Exception as e:
             logger.error(f"Verification failed: {e}", exc_info=True)
+            raise
+
+    def process_tournament_job(self, job):
+        """
+        大会IDジョブを処理（CSV取得→照合→PDF）
+        """
+        job_id = job['job_id']
+        metadata = job.get('metadata', {})
+        game_id = metadata.get('game_id')
+        jba_credentials = metadata.get('jba_credentials')
+        generate_pdf = metadata.get('generate_pdf', True)
+
+        if not game_id or not jba_credentials:
+            raise ValueError("Job metadata missing required fields (game_id, jba_credentials)")
+
+        try:
+            # 実処理は tournament ルーターのランナーを使用
+            from routers.tournament import run_tournament_job as tournament_runner
+            tournament_runner(job_id, game_id, jba_credentials, generate_pdf)
+            # 上記内で Supabase のステータス更新（done/error）まで実施
+        except Exception as e:
+            logger.error(f"Tournament job failed: {e}", exc_info=True)
+            # フェイルセーフでエラーを書き戻す
+            self.supabase.update_job(
+                job_id,
+                status='error',
+                error=str(e)
+            )
             raise
     
     def run(self):
