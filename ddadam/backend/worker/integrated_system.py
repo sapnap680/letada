@@ -358,20 +358,28 @@ class IntegratedTournamentSystem:
                     # CSVをDataFrameに変換（日本語対応）
                     # まずはレスポンスのエンコーディングを確認
                     response_encoding = csv_response.encoding or 'utf-8'
-                    csv_text = csv_response.text
+                    print(f"🔍 CSV {i+1} レスポンスエンコーディング: {response_encoding}")
                     
-                    # エンコーディングを試行
-                    try:
-                        df = pd.read_csv(StringIO(csv_text))
-                    except UnicodeDecodeError:
-                        # UTF-8で失敗した場合はShift_JISを試行
+                    # 複数のエンコーディングを試行
+                    csv_encodings = ['utf-8', 'shift_jis', 'cp932', 'iso-2022-jp', 'euc-jp', 'utf-8-sig']
+                    df = None
+                    
+                    for encoding in csv_encodings:
                         try:
-                        csv_text = csv_response.content.decode('shift_jis')
-                        df = pd.read_csv(StringIO(csv_text))
-                        except UnicodeDecodeError:
-                            # Shift_JISでも失敗した場合はcp932を試行
-                            csv_text = csv_response.content.decode('cp932')
-                        df = pd.read_csv(StringIO(csv_text))
+                            if encoding == 'utf-8-sig':
+                                csv_text = csv_response.content.decode('utf-8-sig')
+                            else:
+                                csv_text = csv_response.content.decode(encoding)
+                            df = pd.read_csv(StringIO(csv_text))
+                            print(f"✅ CSV {i+1} エンコーディング成功: {encoding}")
+                            break
+                        except (UnicodeDecodeError, pd.errors.ParserError) as e:
+                            print(f"⚠️ CSV {i+1} エンコーディング失敗: {encoding} - {e}")
+                            continue
+                    
+                    if df is None:
+                        print(f"❌ CSV {i+1} 全てのエンコーディングで失敗")
+                        continue
                     
                     # 大学名を取得（文字エンコーディング対応）
                     content_disposition = csv_response.headers.get("content-disposition", "")
@@ -380,18 +388,45 @@ class IntegratedTournamentSystem:
                     if filename_match:
                         # 文字エンコーディングを修正
                         university_name = filename_match.group(1).replace('.csv', '')
+                        print(f"🔍 元の大学名: {repr(university_name)}")
+                        
                         try:
-                            # URLデコードしてからUTF-8でデコード
+                            # 複数のエンコーディングを試行
+                            encodings_to_try = ['utf-8', 'shift_jis', 'cp932', 'iso-2022-jp', 'euc-jp']
+                            
+                            for encoding in encodings_to_try:
+                                try:
+                                    # バイト列に戻してから指定エンコーディングでデコード
+                                    if isinstance(university_name, str):
+                                        # 文字列をバイト列に変換（latin-1経由）
+                                        byte_name = university_name.encode('latin-1')
+                                        university_name = byte_name.decode(encoding)
+                                        print(f"✅ エンコーディング成功: {encoding} -> {university_name}")
+                                        break
+                                except (UnicodeDecodeError, UnicodeEncodeError):
+                                    continue
+                            
+                            # URLデコードも試行
                             import urllib.parse
                             university_name = urllib.parse.unquote(university_name)
-                            # さらにISO-8859-1からUTF-8に変換を試行
-                            if '\\' in university_name:
-                                university_name = university_name.encode('latin-1').decode('utf-8')
-                        except:
+                            
+                        except Exception as e:
+                            print(f"⚠️ エンコーディング変換失敗: {e}")
                             # エンコーディング変換に失敗した場合はそのまま使用
                             pass
+                        
+                        print(f"📝 最終大学名: {university_name}")
                     else:
                         university_name = f"大学_{i+1}"
+                    
+                    # 大学名の正規化（余分な文字を除去）
+                    university_name = university_name.strip()
+                    # よくある文字化けパターンを修正
+                    university_name = university_name.replace('æ', '東').replace('å', '大').replace('é', '学')
+                    university_name = university_name.replace('ç', '科').replace('è', '学').replace('ã', 'ー')
+                    university_name = university_name.replace('ï', '学').replace('í', '学').replace('ó', '学')
+                    
+                    print(f"🎯 正規化後大学名: {university_name}")
                     
                     # 大学名をDataFrameに追加
                     df['大学名'] = university_name
