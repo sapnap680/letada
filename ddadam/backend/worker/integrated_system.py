@@ -1,4 +1,4 @@
-# Streamlit removed
+ni# Streamlit removed
 import requests
 import logging
 
@@ -17,7 +17,7 @@ import uuid
 import multiprocessing
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 try:
-    from integrated_system_worker import pdf_worker_main
+from integrated_system_worker import pdf_worker_main
 except Exception:
     pdf_worker_main = None
 from io import StringIO
@@ -107,8 +107,8 @@ class IntegratedTournamentSystem:
                 
                 # MS 明朝
                 if not hasattr(self, 'default_font'):
-                    try:
-                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                try:
+                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
                         print("✅ MS-Mincho フォント登録成功")
                     except Exception as e:
@@ -116,8 +116,8 @@ class IntegratedTournamentSystem:
                 
                 # メイリオ
                 if not hasattr(self, 'default_font'):
-                    try:
-                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                try:
+                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
                         print("✅ Meiryo フォント登録成功")
                     except Exception as e:
@@ -366,12 +366,12 @@ class IntegratedTournamentSystem:
                     except UnicodeDecodeError:
                         # UTF-8で失敗した場合はShift_JISを試行
                         try:
-                            csv_text = csv_response.content.decode('shift_jis')
-                            df = pd.read_csv(StringIO(csv_text))
+                        csv_text = csv_response.content.decode('shift_jis')
+                        df = pd.read_csv(StringIO(csv_text))
                         except UnicodeDecodeError:
                             # Shift_JISでも失敗した場合はcp932を試行
                             csv_text = csv_response.content.decode('cp932')
-                            df = pd.read_csv(StringIO(csv_text))
+                        df = pd.read_csv(StringIO(csv_text))
                     
                     # 大学名を取得（文字エンコーディング対応）
                     content_disposition = csv_response.headers.get("content-disposition", "")
@@ -723,6 +723,58 @@ class IntegratedTournamentSystem:
             'university': univ
         }
         
+        # JBA照合結果の詳細処理
+        if verification_result['status'] == 'match':
+            if 'jba_data' in verification_result:
+                jba_data = verification_result['jba_data']
+                corrected_data = row.to_dict().copy()
+                
+                # JBA情報を追加
+                if 'height' in jba_data and jba_data['height']:
+                    corrected_data['身長'] = f"{jba_data['height']}cm"
+                if 'weight' in jba_data and jba_data['weight']:
+                    corrected_data['体重'] = f"{jba_data['weight']}kg"
+                if 'position' in jba_data and jba_data['position']:
+                    corrected_data['ポジション'] = jba_data['position']
+                if 'school' in jba_data and jba_data['school']:
+                    corrected_data['出身校'] = jba_data['school']
+                if 'grade' in jba_data and jba_data['grade']:
+                    corrected_data['学年'] = jba_data['grade']
+                if 'uniform_number' in jba_data and jba_data['uniform_number']:
+                    corrected_data['背番号'] = jba_data['uniform_number']
+                
+                result['correction'] = corrected_data
+                result['message'] = 'JBAデータベースと完全一致（詳細情報追加）'
+            else:
+                result['correction'] = None
+                result['message'] = 'JBAデータベースと完全一致'
+        
+        elif verification_result['status'] == 'partial_match':
+            jba_data = verification_result['jba_data']
+            similarity = verification_result.get('similarity', 0.0)
+            
+            corrected_data = row.to_dict().copy()
+            
+            if 'height' in jba_data and jba_data['height']:
+                corrected_data['身長'] = f"{jba_data['height']}cm"
+            if 'weight' in jba_data and jba_data['weight']:
+                corrected_data['体重'] = f"{jba_data['weight']}kg"
+            if 'position' in jba_data and jba_data['position']:
+                corrected_data['ポジション'] = jba_data['position']
+            if 'school' in jba_data and jba_data['school']:
+                corrected_data['出身校'] = jba_data['school']
+            if 'grade' in jba_data and jba_data['grade']:
+                corrected_data['学年'] = jba_data['grade']
+            if 'uniform_number' in jba_data and jba_data['uniform_number']:
+                corrected_data['背番号'] = jba_data['uniform_number']
+            
+            result['correction'] = corrected_data
+            result['message'] = f"部分一致: {jba_data['name']} (類似度: {similarity:.3f}) - 手動確認推奨"
+        
+        else:
+            result['correction'] = None
+            result['message'] = verification_result.get('message', '照合できませんでした')
+        
         # 結果をキャッシュに保存
         self._set_cached_data(cache_key, result)
         
@@ -989,7 +1041,7 @@ class IntegratedTournamentSystem:
         
         # Streamlit UI 削除済み: 何もしない
         return None
-
+    
     def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf", max_rows_per_page=100):
         """全大学レポートをコンパクトなPDFで出力（画像の形式に準拠）"""
         # A4縦向きで作成
@@ -1019,6 +1071,10 @@ class IntegratedTournamentSystem:
         # ヘッダー情報（最小限）
         elements.append(Paragraph("🏀 全大学選手データ一覧", title_style))
         elements.append(Spacer(1, 1))  # スペースを最小限に
+        
+        # デバッグ情報
+        print(f"📝 PDF生成開始 - 使用フォント: {getattr(self, 'default_font', 'Unknown')}")
+        print(f"📊 レポート数: {len(reports)}")
         
         # 各大学のレポート（コンパクトな表形式）
         for i, (univ_name, report) in enumerate(reports.items()):
@@ -1102,8 +1158,8 @@ class IntegratedTournamentSystem:
                     
                     data.append(row_data)
                 
-                # テーブル作成（A4縦向き最適化）
-                col_widths = [8*mm, 18*mm, 18*mm, 12*mm, 8*mm, 10*mm, 8*mm, 12*mm, 20*mm, 8*mm]
+                # テーブル作成（A4縦向き最適化）- 選手名・カナ名の列幅を倍に
+                col_widths = [8*mm, 36*mm, 36*mm, 12*mm, 8*mm, 10*mm, 8*mm, 12*mm, 20*mm, 8*mm]
                 
                 # 行の高さを固定で設定（final_100_output.pdfと同じ設定）
                 row_heights = [10] + [7] * (len(data) - 1)  # ヘッダー10pt、データ行7pt
@@ -1190,18 +1246,18 @@ class IntegratedTournamentSystem:
                 self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
                 raise
         else:
-            try:
-                ctx = multiprocessing.get_context("spawn")
-                proc = ctx.Process(
-                    target=pdf_worker_main,
-                    args=(serializable_reports, output_filename, job_meta_path),
-                    daemon=False
-                )
-                proc.start()
-            except Exception as e:
-                # 失敗したら job_meta にエラーを書き込む
-                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
-                raise
+        try:
+            ctx = multiprocessing.get_context("spawn")
+            proc = ctx.Process(
+                target=pdf_worker_main,
+                args=(serializable_reports, output_filename, job_meta_path),
+                daemon=False
+            )
+            proc.start()
+        except Exception as e:
+            # 失敗したら job_meta にエラーを書き込む
+            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+            raise
 
         return job_meta_path
 
