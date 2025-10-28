@@ -33,7 +33,7 @@ import sys
 sys.path.append('.')
 
 # JBA検証システムのインポート
-from jba_verification_lib import JBAVerificationSystem, FastCSVCorrectionSystem, DataValidator
+from worker.jba_verification_lib import JBAVerificationSystem, FastCSVCorrectionSystem, DataValidator
 
 class IntegratedTournamentSystem:
     """大会IDからJBA照合まで一括処理する統合システム"""
@@ -886,194 +886,13 @@ class IntegratedTournamentSystem:
         """大学別レポートを表示"""
         # Markdown removed
         
-        # 統計情報
-        col1, col2, col3, col4, col5 = # Columns removed
-        
-        with col1:
-            # Metric removed
-        with col2:
-            # Metric removed
-        with col3:
-            # Metric removed
-        with col4:
-            # Metric removed
-        with col5:
-            # Metric removed
-        
-        # タブ表示
-        tab1, tab2 = # Tabs removed
-        
-        with tab1:
-            # Subheader removed
-            # logger.info() removed
-            # logger.info() removed
-            # logger.info() removed
-            # logger.info() removed
-        
-        with tab2:
-            # Subheader removed
-            
-            if st.button("📚 全大学一括レポートを生成", type="primary"):
-                with st.spinner("📚 PDFを生成中..."):
-                    try:
-                        pdf_path = self.export_all_university_reports_as_pdf(reports)
-                        
-                        with open(pdf_path, "rb") as f:
-                            st.download_button(
-                                label="📚 全大学一括PDFをダウンロード",
-                                data=f.read(),
-                                file_name=f"大会ID{game_id}_全大学選手データ.pdf",
-                                mime="application/pdf"
-                            )
-                        
-                        # 全大学のレポートが生成されました
-                    except Exception as e:
-                        # PDF生成エラー
-                        logger.exception(e)
+        # Streamlit UI 削除済み: 何もしない
+        return None
 
 def main():
     """メイン処理"""
-    st.title("🏀 大会統合システム")
-    # Markdown removed
-    
-    # サイドバーで設定
-    st.sidebar.header("⚙️ 設定")
-    
-    # ログイン情報
-    st.sidebar.subheader("🔐 ログイン情報")
-    username = st.sidebar.text_input("ログインID", value="kcbf")
-    password = st.sidebar.text_input("パスワード", value="sakura272", type="password")
-    
-    # 大会ID
-    st.sidebar.subheader("🏀 大会設定")
-    game_id = st.sidebar.number_input("大会ID", value=76, min_value=1)
-    
-    # 処理開始ボタン
-    if st.sidebar.button("🚀 処理開始", type="primary"):
-        
-        # システム初期化
-        from jba_verification_lib import JBAVerificationSystem, DataValidator
-        
-        jba_system = JBAVerificationSystem()
-        validator = DataValidator()
-        integrated_system = IntegratedTournamentSystem(jba_system, validator)
-        
-        # ステップ1: CSV取得
-        st.header("📥 ステップ1: 大会CSV取得")
-        df = integrated_system.login_and_get_tournament_csvs(username, password, game_id)
-        
-        if df is not None:
-            # データを取得しました
-            
-            # ステップ2: JBA照合
-            st.header("🔍 ステップ2: JBA照合処理")
-            results = integrated_system.process_tournament_data(df)
-            
-            if results:
-                # 照合が完了しました
-                
-                # ステップ3: レポート作成
-                st.header("📊 ステップ3: 大学別レポート")
-                reports = integrated_system.create_university_reports(results)
-                
-                if reports:
-                    # 大学のレポートを作成しました
-                    
-                    # 大学選択
-                    selected_univ = st.selectbox("大学を選択:", list(reports.keys()))
-                    
-                    if selected_univ:
-                        report = reports[selected_univ]
-                        
-                        # 統計情報表示
-                        col1, col2, col3, col4 = # Columns removed
-                        with col1:
-                            # Metric removed
-                        with col2:
-                            # Metric removed
-                        with col3:
-                            # Metric removed
-                        with col4:
-                            # Metric removed
-                        
-                        # 一致率
-                        # Metric removed
-                        
-                        # 詳細データ表示
-                        # Subheader removed
-                        
-                        # タブで分類表示
-                        tab1, tab2, tab3, tab4 = # Tabs removed
-                        
-                        with tab1:
-                            # Dataframe removed)
-                        
-                        with tab2:
-                            match_results = [r for r in report['results'] if r['status'] == 'match']
-                            if match_results:
-                                # Dataframe removed)
-                            else:
-                                # 完全一致のデータはありません
-                                pass
-                        
-                        with tab3:
-                            partial_results = [r for r in report['results'] if r['status'] == 'partial_match']
-                            if partial_results:
-                                # Dataframe removed)
-                            else:
-                                # 部分一致のデータはありません
-                                pass
-                        
-                        with tab4:
-                            not_found_results = [r for r in report['results'] if r['status'] == 'not_found']
-                            if not_found_results:
-                                # Dataframe removed)
-                            else:
-                                # 未発見のデータはありません
-                                pass
-                        
-                        # 全大学一括印刷レポート
-                        # Subheader removed
-                        
-                        col1, col2 = # Columns removed
-                        
-                        with col1:
-                            if st.button("📄 選択大学のレポートを生成"):
-                                # 選択された大学のレポートを生成
-                                html_content = self._generate_university_report(selected_univ, report)
-                                
-                                st.download_button(
-                                    label="📄 HTMLレポートをダウンロード",
-                                    data=html_content,
-                                    file_name=f"{selected_univ}_選手データ.html",
-                                    mime="text/html"
-                                )
-                        
-                        with col2:
-                            if st.button("📚 全大学一括レポートを生成", type="primary"):
-                                # 全大学のレポートを生成
-                                # 全大学のレポートを生成中
-                                
-                                html_content = self._generate_all_universities_report(reports)
-                                
-                                st.download_button(
-                                    label="📚 全大学一括HTMLレポートをダウンロード",
-                                    data=html_content,
-                                    file_name=f"大会ID{game_id}_全大学選手データ.html",
-                                    mime="text/html"
-                                )
-                                
-                                # 全大学のレポートが生成されました
-                
-                else:
-                    # レポートの作成に失敗しました
-                    pass
-            else:
-                # JBA照合処理に失敗しました
-                pass
-        else:
-            # CSV取得に失敗しました
-            pass
+    # CLI/Streamlit UI は削除済み
+    return
     
     def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf", max_rows_per_page=100):
         """全大学レポートをコンパクトなPDFで出力（画像の形式に準拠）"""
