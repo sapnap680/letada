@@ -148,7 +148,9 @@ class SupabaseHelper:
         progress: Optional[float] = None,
         message: Optional[str] = None,
         output_path: Optional[str] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        error_detail: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         ジョブステータスを更新
@@ -179,6 +181,10 @@ class SupabaseHelper:
                 update_data['output_path'] = output_path
             if error is not None:
                 update_data['error'] = error
+            if error_detail is not None:
+                update_data['error_detail'] = error_detail
+            if metadata is not None:
+                update_data['metadata'] = metadata
             
             response = self.client.table('jobs').update(update_data).eq('job_id', job_id).execute()
             return True

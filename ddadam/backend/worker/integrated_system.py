@@ -1202,5 +1202,54 @@ def main():
         doc.build(elements)
         return output_path
 
+    def generate_pdfs_by_university(self, df, output_dir, filename_prefix="tournament"):
+        """大学ごとにPDFを生成（1大学1ページ）"""
+        if df is None or df.empty:
+            return None
+
+        # 大学ごとにグループ化
+        universities = df['大学名'].unique() if '大学名' in df.columns else ["Unknown"]
+        pdf_files = []
+
+        for univ in universities:
+            if '大学名' in df.columns:
+                univ_data = df[df['大学名'] == univ].copy()
+            else:
+                univ_data = df.copy()
+
+            # 大学のレポートを作成
+            report = {
+                'university': univ,
+                'total_players': len(univ_data),
+                'match_count': 0,  # 簡易版
+                'partial_match_count': 0,
+                'not_found_count': 0,
+                'match_rate': 0.0,
+                'results': []  # 簡易版
+            }
+
+            # 選手データを結果形式に変換
+            for index, row in univ_data.iterrows():
+                result = {
+                    'index': index,
+                    'original_data': row.to_dict(),
+                    'status': 'unknown',
+                    'message': '処理済み'
+                }
+                report['results'].append(result)
+
+            # PDF生成
+            pdf_filename = f"{filename_prefix}_{univ}.pdf"
+            pdf_path = os.path.join(output_dir, pdf_filename)
+            
+            try:
+                self.export_single_university_report_as_pdf(univ, report, pdf_path)
+                pdf_files.append(pdf_path)
+                logger.info(f"✅ PDF生成完了: {pdf_path}")
+            except Exception as e:
+                logger.error(f"❌ PDF生成エラー ({univ}): {e}")
+
+        return pdf_files
+
 if __name__ == "__main__":
     main()

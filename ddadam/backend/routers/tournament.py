@@ -93,18 +93,15 @@ def run_tournament_job(
         
         # PDF生成
         supabase.update_job(job_id, message="PDFを生成中...", progress=0.7)
-        
+
         output_dir = "outputs"
         os.makedirs(output_dir, exist_ok=True)
         pdf_filename = f"tournament_{game_id}_{job_id[:8]}.pdf"
         pdf_path = os.path.join(output_dir, pdf_filename)
-        
-        # 大学ごとにPDF生成
-        system.generate_pdfs_by_university(
-            df=result_df,
-            output_dir=output_dir,
-            filename_prefix=f"tournament_{game_id}"
-        )
+
+        # 結果から大学別レポートを作成し、1ファイルに統合してPDF生成
+        reports = system.create_university_reports(result_df)
+        system.export_all_university_reports_as_pdf(reports, output_path=pdf_path)
         
         logger.info(f"✅ PDF生成完了: {pdf_path}")
 
