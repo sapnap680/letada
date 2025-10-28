@@ -135,8 +135,6 @@ class IntegratedTournamentSystem:
                 font_paths_ttf_otf = [
                     '/usr/share/fonts/truetype/noto/NotoSansCJKjp-Regular.otf',
                     '/usr/share/fonts/truetype/noto/NotoSerifCJKjp-Regular.otf',
-                    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-                    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
                 ]
                 
                 font_registered = False
@@ -151,7 +149,18 @@ class IntegratedTournamentSystem:
                             break
                         else:
                             print(f"⚠️ TTC登録失敗: {ttc_path}")
-                # つぎに単一フォントファイルを試す
+                # 次に、CIDフォント（組み込み日本語フォント）を優先して試す
+                if not font_registered:
+                    try:
+                        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+                        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+                        self.default_font = 'HeiseiKakuGo-W5'
+                        print("✅ ReportLab組み込み日本語フォント使用 (HeiseiKakuGo-W5)")
+                        font_registered = True
+                    except Exception as e:
+                        print(f"⚠️ 組み込みCIDフォント登録失敗: {e}")
+
+                # つぎに単一CJKフォントファイル（OTF）を試す（存在する場合）
                 if not font_registered:
                     for font_path in font_paths_ttf_otf:
                         if os.path.exists(font_path):
@@ -167,16 +176,9 @@ class IntegratedTournamentSystem:
                 
                 # フォント登録に失敗した場合は、ReportLabのデフォルトフォントを使用
                 if not font_registered:
-                    # 最後の手段として、ReportLabの組み込みフォントを試行
-                    try:
-                        # ReportLabの組み込み日本語フォントを試行
-                        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-                        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
-                        self.default_font = 'HeiseiKakuGo-W5'
-                        print("✅ ReportLab組み込み日本語フォント使用")
-                    except Exception as e:
-                        self.default_font = 'Helvetica'
-                        print(f"⚠️ 日本語フォントが見つからないため、Helveticaを使用: {e}")
+                    # 最後の手段として、英字フォントを使用（日本語は豆腐になる可能性あり）
+                    self.default_font = 'Helvetica'
+                    print("⚠️ 日本語フォントが見つからないため、Helveticaを一時使用（日本語は表示不可の可能性）")
                     
         except Exception as e:
             print(f"⚠️ 日本語フォント登録エラー: {str(e)}")
