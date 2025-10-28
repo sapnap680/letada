@@ -1,4 +1,4 @@
-ni# Streamlit removed
+# Streamlit removed
 import requests
 import logging
 
@@ -17,7 +17,7 @@ import uuid
 import multiprocessing
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 try:
-from integrated_system_worker import pdf_worker_main
+    from integrated_system_worker import pdf_worker_main
 except Exception:
     pdf_worker_main = None
 from io import StringIO
@@ -107,8 +107,8 @@ class IntegratedTournamentSystem:
                 
                 # MS 明朝
                 if not hasattr(self, 'default_font'):
-                try:
-                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                    try:
+                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
                         print("✅ MS-Mincho フォント登録成功")
                     except Exception as e:
@@ -116,8 +116,8 @@ class IntegratedTournamentSystem:
                 
                 # メイリオ
                 if not hasattr(self, 'default_font'):
-                try:
-                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                    try:
+                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
                         print("✅ Meiryo フォント登録成功")
                     except Exception as e:
@@ -1281,17 +1281,17 @@ class IntegratedTournamentSystem:
                 self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
                 raise
         else:
-        try:
-            ctx = multiprocessing.get_context("spawn")
-            proc = ctx.Process(
-                target=pdf_worker_main,
-                args=(serializable_reports, output_filename, job_meta_path),
-                daemon=False
-            )
-            proc.start()
-        except Exception as e:
-            # 失敗したら job_meta にエラーを書き込む
-            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+            try:
+                ctx = multiprocessing.get_context("spawn")
+                proc = ctx.Process(
+                    target=pdf_worker_main,
+                    args=(serializable_reports, output_filename, job_meta_path),
+                    daemon=False
+                )
+                proc.start()
+            except Exception as e:
+                # 失敗したら job_meta にエラーを書き込む
+                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
             raise
 
         return job_meta_path
@@ -1429,9 +1429,9 @@ class IntegratedTournamentSystem:
             try:
                 self.export_single_university_report_as_pdf(univ, report, pdf_path)
                 pdf_files.append(pdf_path)
-                logger.info(f"✅ PDF生成完了: {pdf_path}")
+                print(f"✅ PDF生成完了: {pdf_path}")
             except Exception as e:
-                logger.error(f"❌ PDF生成エラー ({univ}): {e}")
+                print(f"❌ PDF生成エラー ({univ}): {e}")
 
         return pdf_files
 
