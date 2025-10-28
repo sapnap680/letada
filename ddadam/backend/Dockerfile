@@ -4,6 +4,13 @@ FROM python:3.11-slim
 # 作業ディレクトリ
 WORKDIR /app
 
+# システムパッケージの更新と日本語フォントのインストール
+RUN apt-get update && apt-get install -y \
+    fonts-noto-cjk \
+    fonts-dejavu-core \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
 # 依存ライブラリをコピーしてインストール
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

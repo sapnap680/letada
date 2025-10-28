@@ -86,33 +86,73 @@ class IntegratedTournamentSystem:
             if platform.system() == "Windows":
                 # MS ゴシック
                 try:
-                    TTFont('MS-Gothic', 'C:/Windows/Fonts/msgothic.ttc')
                     pdfmetrics.registerFont(TTFont('MS-Gothic', 'C:/Windows/Fonts/msgothic.ttc'))
                     self.default_font = 'MS-Gothic'
-                except:
-                    pass
+                    print("✅ MS-Gothic フォント登録成功")
+                except Exception as e:
+                    print(f"⚠️ MS-Gothic 登録失敗: {e}")
+                
                 # MS 明朝
-                try:
-                    TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc')
-                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
-                    if not hasattr(self, 'default_font'):
+                if not hasattr(self, 'default_font'):
+                    try:
+                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
-                except:
-                    pass
+                        print("✅ MS-Mincho フォント登録成功")
+                    except Exception as e:
+                        print(f"⚠️ MS-Mincho 登録失敗: {e}")
+                
                 # メイリオ
-                try:
-                    TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc')
-                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
-                    if not hasattr(self, 'default_font'):
+                if not hasattr(self, 'default_font'):
+                    try:
+                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
-                except:
-                    pass
+                        print("✅ Meiryo フォント登録成功")
+                    except Exception as e:
+                        print(f"⚠️ Meiryo 登録失敗: {e}")
+            
+            # Linux/Macの場合
             else:
-                # Linux/Macの場合（デフォルトフォントを使用）
-                self.default_font = 'Helvetica'
+                # Linux環境での日本語フォント対応
+                font_paths = [
+                    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+                    '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+                    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+                    '/System/Library/Fonts/Helvetica.ttc',  # macOS
+                    '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf'
+                ]
+                
+                font_registered = False
+                for font_path in font_paths:
+                    if os.path.exists(font_path):
+                        try:
+                            pdfmetrics.registerFont(TTFont('JapaneseFont', font_path))
+                            self.default_font = 'JapaneseFont'
+                            print(f"✅ 日本語フォント登録成功: {font_path}")
+                            font_registered = True
+                            break
+                        except Exception as e:
+                            print(f"⚠️ フォント登録失敗 {font_path}: {e}")
+                            continue
+                
+                # フォント登録に失敗した場合は、ReportLabのデフォルトフォントを使用
+                if not font_registered:
+                    # 最後の手段として、ReportLabの組み込みフォントを試行
+                    try:
+                        # ReportLabの組み込み日本語フォントを試行
+                        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+                        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+                        self.default_font = 'HeiseiKakuGo-W5'
+                        print("✅ ReportLab組み込み日本語フォント使用")
+                    except Exception as e:
+                        self.default_font = 'Helvetica'
+                        print(f"⚠️ 日本語フォントが見つからないため、Helveticaを使用: {e}")
+                    
         except Exception as e:
             print(f"⚠️ 日本語フォント登録エラー: {str(e)}")
             self.default_font = 'Helvetica'
+        
+        print(f"📝 使用フォント: {self.default_font}")
     
     def _truncate_text(self, text, max_chars=15):
         """テキストを指定文字数で切り詰め"""
@@ -1078,6 +1118,7 @@ class IntegratedTournamentSystem:
         
         # PDF生成
         doc.build(elements)
+        print(f"📄 PDF生成完了: {output_path} (フォント: {getattr(self, 'default_font', 'Unknown')})")
         return output_path
     
     def start_pdf_generation_background(self, reports, output_filename=None):
