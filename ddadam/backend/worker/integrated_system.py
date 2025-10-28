@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Streamlit removed
 import requests
 import logging
@@ -373,7 +374,7 @@ class IntegratedTournamentSystem:
                             df = pd.read_csv(StringIO(csv_text))
                             print(f"✅ CSV {i+1} エンコーディング成功: {encoding}")
                             break
-                        except (UnicodeDecodeError, pd.errors.ParserError) as e:
+                        except (UnicodeDecodeError, pd.errors.ParserError, UnicodeError) as e:
                             print(f"⚠️ CSV {i+1} エンコーディング失敗: {encoding} - {e}")
                             continue
                     
