@@ -242,3 +242,4 @@ def get_supabase_helper() -> SupabaseHelper:
         _supabase_helper = SupabaseHelper()
     return _supabase_helper
 
+

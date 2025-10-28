@@ -109,3 +109,4 @@ onClick={() => void router.push("/tournament")}
 
 **修正完了後、このファイルは削除してOKです。**
 
+

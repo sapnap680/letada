@@ -212,3 +212,4 @@ async def list_pdfs():
         logger.error(f"Failed to list PDFs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+

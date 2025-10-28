@@ -104,3 +104,4 @@ SELECT * FROM jobs ORDER BY created_at DESC LIMIT 5;
 -- テーブルを削除（注意！）
 -- DROP TABLE IF EXISTS jobs CASCADE;
 
+

@@ -272,3 +272,4 @@ NEXT_PUBLIC_API_URL=https://your-backend.up.railway.app
 
 **[← ドキュメント一覧に戻る](INDEX.md)**
 
+

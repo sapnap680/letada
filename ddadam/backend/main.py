@@ -74,7 +74,12 @@ def health():
         "cwd": os.getcwd(),
         "env": {
             "admin_username": os.getenv("ADMIN_USERNAME", "not set"),
-            "admin_password_set": bool(os.getenv("ADMIN_PASSWORD"))
+            "admin_password_set": bool(os.getenv("ADMIN_PASSWORD")),
+            # デプロイ診断用（機微情報は出さない）
+            "use_supabase_jobs": os.getenv("USE_SUPABASE_JOBS", "false"),
+            "worker_mode": os.getenv("WORKER_MODE", "false"),
+            "supabase_url": os.getenv("SUPABASE_URL", "not set")[:30] + ("..." if os.getenv("SUPABASE_URL") else ""),
+            "supabase_key_set": bool(os.getenv("SUPABASE_KEY"))
         }
     }
 

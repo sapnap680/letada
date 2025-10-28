@@ -136,3 +136,4 @@ async def verify_universities(req: VerifyRequest, background_tasks: BackgroundTa
         polling_url=f"/jobs/{job_id}"
     )
 
+

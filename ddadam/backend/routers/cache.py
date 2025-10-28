@@ -138,3 +138,4 @@ async def warm_cache(universities: list[str]):
 #     """Redis キャッシュの統計情報"""
 #     pass
 
+

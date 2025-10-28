@@ -241,3 +241,4 @@ def get_cache_key(player_name: str, university_name: str) -> str:
     key_string = f"{player_name}_{university_name}".lower().strip()
     return hashlib.md5(key_string.encode()).hexdigest()
 
+
