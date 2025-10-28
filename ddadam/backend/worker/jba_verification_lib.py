@@ -1723,17 +1723,17 @@ def main():
                     
                     col1, col2, col3, col4, col5, col6 = st.columns(6)
                     with col1:
-                        # Metric removed
+                        pass
                     with col2:
-                        # Metric removed
+                        pass
                     with col3:
-                        # Metric removed
+                        pass
                     with col4:
-                        # Metric removed  # 実際に訂正があった件数
+                        pass
                     with col5:
-                        # Metric removed
+                        pass
                     with col6:
-                        # Metric removed
+                        pass
                     
                     # 訂正版CSVを作成
                     corrected_df = st.session_state.csv_system.create_corrected_csv(df, results)
