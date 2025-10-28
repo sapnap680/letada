@@ -22,12 +22,33 @@ import concurrent.futures
 import time
 import threading
 
-# ページ設定
-st.set_page_config(
-    page_title="CSV自動訂正システム",
-    page_icon="🏀",
-    layout="wide"
-)
+# Streamlit 非依存化のためのスタブ
+try:
+    import streamlit as st  # 実行環境にあれば使用
+except Exception:
+    class _DummyCtx:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+    class _STStub:
+        def __getattr__(self, name):
+            if name == 'columns':
+                return lambda n: [_DummyCtx() for _ in range(n)]
+            if name == 'tabs':
+                return lambda names: [_DummyCtx() for _ in names]
+            if name == 'expander':
+                return lambda *a, **k: _DummyCtx()
+            return lambda *a, **k: None
+    st = _STStub()
+
+# プレースホルダが未定義でも落ちないようにダミー定義
+class _Placeholder:
+    def __getattr__(self, name):
+        return lambda *a, **k: None
+status_placeholder = _Placeholder()
+csv_progress = _Placeholder()
+csv_status = _Placeholder()
 
 class JBAVerificationSystem:
     """JBA検証システム（requests + BeautifulSoupベース）"""
@@ -144,13 +165,13 @@ class JBAVerificationSystem:
                 # Status placeholder update removed
                 # Sleep removed  # 1秒表示
                 # Progress bar cleanup removed
-                status_placeholder.empty()
+                pass
                 return True
             else:
                 # Status placeholder update removed
                 # Sleep removed  # 2秒表示
                 # Progress bar cleanup removed
-                status_placeholder.empty()
+                pass
                 return False
                 
         except Exception as e:
@@ -1305,13 +1326,13 @@ class FastCSVCorrectionSystem:
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            # Metric removed
+            pass
         with col2:
-            # Metric removed
+            pass
         with col3:
-            # Metric removed
+            pass
         with col4:
-            # Metric removed
+            pass
         
         return results
     
