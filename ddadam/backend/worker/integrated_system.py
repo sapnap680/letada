@@ -15,7 +15,11 @@ from datetime import datetime
 import json
 import uuid
 import multiprocessing
-from integrated_system_worker import pdf_worker_main
+# オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
+try:
+    from integrated_system_worker import pdf_worker_main
+except Exception:
+    pdf_worker_main = None
 from io import StringIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -1081,19 +1085,30 @@ def main():
             # 最低限: 文字列化に失敗したらそのまま渡す（pickle に任せる）
             serializable_reports = reports
 
-        # --- spawn コンテキストでプロセスを作成 ---
-        try:
-            ctx = multiprocessing.get_context("spawn")
-            proc = ctx.Process(
-                target=pdf_worker_main,
-                args=(serializable_reports, output_filename, job_meta_path),
-                daemon=False
-            )
-            proc.start()
-        except Exception as e:
-            # 失敗したら job_meta にエラーを書き込む
-            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
-            raise
+        # --- spawn コンテキストでプロセスを作成（ワーカー未提供なら同期生成にフォールバック） ---
+        if pdf_worker_main is None:
+            # フォールバック: 同期でPDF生成を実行（最低限の動作確保）
+            try:
+                # フォールバックとして全大学PDFを単発生成（reports 構造に依存）
+                output_pdf = output_filename if output_filename.endswith('.pdf') else output_filename.replace('.zip', '.pdf')
+                self.export_all_university_reports_as_pdf(reports=reports, output_path=output_pdf)
+                self._write_job_meta(job_meta_path, status="done", progress=1.0, message="PDF generated (fallback)", output_path=output_pdf)
+            except Exception as e:
+                self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
+                raise
+        else:
+            try:
+                ctx = multiprocessing.get_context("spawn")
+                proc = ctx.Process(
+                    target=pdf_worker_main,
+                    args=(serializable_reports, output_filename, job_meta_path),
+                    daemon=False
+                )
+                proc.start()
+            except Exception as e:
+                # 失敗したら job_meta にエラーを書き込む
+                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+                raise
 
         return job_meta_path
 
