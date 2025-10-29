@@ -720,6 +720,20 @@ class IntegratedTournamentSystem:
         # 結果をコンパクトに表示 (Streamlit removed)
         # Metrics removed
         
+        # JBA照合統計を表示
+        total_players = len(all_results)
+        match_count = len([r for r in all_results if r.get('status') == 'match'])
+        partial_match_count = len([r for r in all_results if r.get('status') == 'partial_match'])
+        not_found_count = len([r for r in all_results if r.get('status') == 'not_found'])
+        error_count = len([r for r in all_results if r.get('status') == 'error'])
+        
+        print(f"📊 JBA照合統計:")
+        print(f"   総選手数: {total_players}")
+        print(f"   完全一致: {match_count}")
+        print(f"   部分一致: {partial_match_count}")
+        print(f"   未発見: {not_found_count}")
+        print(f"   エラー: {error_count}")
+        
         # 並列処理完了
         
         return all_results
@@ -737,10 +751,20 @@ class IntegratedTournamentSystem:
             return cached_result
         
         # 実際にJBA照合を実行
+        print(f"🔍 JBA照合開始: {player_name} ({univ})")
         start_time = time.time()
-        verification_result = self.jba_system.verify_player_info(
-            player_name, None, univ, get_details=True, threshold=1.0
-        )
+        try:
+            verification_result = self.jba_system.verify_player_info(
+                player_name, None, univ, get_details=True, threshold=1.0
+            )
+            print(f"✅ JBA照合完了: {player_name} -> {verification_result['status']}")
+        except Exception as e:
+            print(f"❌ JBA照合エラー: {player_name} - {e}")
+            verification_result = {
+                'status': 'error',
+                'message': f'JBA照合エラー: {str(e)}',
+                'jba_data': None
+            }
         end_time = time.time()
         
         # パフォーマンス統計を更新

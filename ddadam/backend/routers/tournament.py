@@ -52,7 +52,10 @@ def run_tournament_job(
         
         # JBAログイン（選手検索用）
         logger.info("JBAログイン中（選手検索用）...")
-        if not jba_system.login(jba_credentials["email"], jba_credentials["password"]):
+        print(f"🔐 JBAログイン試行: {jba_credentials['email']}")
+        login_success = jba_system.login(jba_credentials["email"], jba_credentials["password"])
+        print(f"🔐 JBAログイン結果: {'成功' if login_success else '失敗'}")
+        if not login_success:
             raise Exception("JBAログインに失敗しました")
         
         # システム初期化
