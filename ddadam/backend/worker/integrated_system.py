@@ -1178,6 +1178,33 @@ class IntegratedTournamentSystem:
                     grade = d.get("学年", "")
                     height = d.get("身長", "")
                     weight = d.get("体重", "")
+                    
+                    # 身長・体重の小数点以下を切り捨て（単位付きも対応）
+                    if height:
+                        height_str = str(height)
+                        # 数値部分を抽出して小数点以下を切り捨て
+                        import re
+                        height_match = re.search(r'(\d+(?:\.\d+)?)', height_str)
+                        if height_match:
+                            try:
+                                height_num = int(float(height_match.group(1)))
+                                # 単位を保持（cm, kg等）
+                                unit = re.sub(r'\d+(?:\.\d+)?', '', height_str).strip()
+                                height = f"{height_num}{unit}" if unit else str(height_num)
+                            except (ValueError, TypeError):
+                                pass
+                    if weight:
+                        weight_str = str(weight)
+                        # 数値部分を抽出して小数点以下を切り捨て
+                        weight_match = re.search(r'(\d+(?:\.\d+)?)', weight_str)
+                        if weight_match:
+                            try:
+                                weight_num = int(float(weight_match.group(1)))
+                                # 単位を保持（cm, kg等）
+                                unit = re.sub(r'\d+(?:\.\d+)?', '', weight_str).strip()
+                                weight = f"{weight_num}{unit}" if unit else str(weight_num)
+                            except (ValueError, TypeError):
+                                pass
                     position = d.get("ポジション", "")
                     school = d.get("出身校", "")
                     
@@ -1195,26 +1222,54 @@ class IntegratedTournamentSystem:
                         if corrected_data.get("学年") != grade:
                             grade = f'<font color="red">{corrected_data.get("学年", grade)}</font>'
                         if corrected_data.get("身長") != height:
-                            height = f'<font color="red">{corrected_data.get("身長", height)}</font>'
+                            corrected_height = corrected_data.get("身長", height)
+                            # 修正された身長も小数点以下を切り捨て（単位付きも対応）
+                            if corrected_height:
+                                corrected_height_str = str(corrected_height)
+                                corrected_height_match = re.search(r'(\d+(?:\.\d+)?)', corrected_height_str)
+                                if corrected_height_match:
+                                    try:
+                                        corrected_height_num = int(float(corrected_height_match.group(1)))
+                                        unit = re.sub(r'\d+(?:\.\d+)?', '', corrected_height_str).strip()
+                                        corrected_height = f"{corrected_height_num}{unit}" if unit else str(corrected_height_num)
+                                    except (ValueError, TypeError):
+                                        pass
+                            height = f'<font color="red">{corrected_height}</font>'
                         if corrected_data.get("体重") != weight:
-                            weight = f'<font color="red">{corrected_data.get("体重", weight)}</font>'
+                            corrected_weight = corrected_data.get("体重", weight)
+                            # 修正された体重も小数点以下を切り捨て（単位付きも対応）
+                            if corrected_weight:
+                                corrected_weight_str = str(corrected_weight)
+                                corrected_weight_match = re.search(r'(\d+(?:\.\d+)?)', corrected_weight_str)
+                                if corrected_weight_match:
+                                    try:
+                                        corrected_weight_num = int(float(corrected_weight_match.group(1)))
+                                        unit = re.sub(r'\d+(?:\.\d+)?', '', corrected_weight_str).strip()
+                                        corrected_weight = f"{corrected_weight_num}{unit}" if unit else str(corrected_weight_num)
+                                    except (ValueError, TypeError):
+                                        pass
+                            weight = f'<font color="red">{corrected_weight}</font>'
                         if corrected_data.get("ポジション") != position:
                             position = f'<font color="red">{corrected_data.get("ポジション", position)}</font>'
                         if corrected_data.get("出身校") != school:
                             school = f'<font color="red">{corrected_data.get("出身校", school)}</font>'
                     
+                    # 数値系はタグを壊さないようにトリムせずにそのまま出力
                     row_data = [
                         self._truncate_text(no, 10),  # No（10文字まで表示）
                         self._truncate_text(player_name, 30),  # 選手名（30文字まで表示）
                         self._truncate_text(kana_name, 30),  # カナ名（30文字まで表示）
                         self._truncate_text(department, 6),  # 学部
                         self._truncate_text(grade, 3),  # 学年
-                        self._truncate_text(height, 5),  # 身長
-                        self._truncate_text(weight, 4),  # 体重
+                        str(height),  # 身長（小数切り捨て済みをそのまま出力）
+                        str(weight),  # 体重（小数切り捨て済みをそのまま出力）
                         self._truncate_text(position, 6),  # ポジション
                         self._truncate_text(school, 10),  # 出身校
                         status_symbol  # JBA登録状況
                     ]
+
+                    # すべてのセルを Paragraph に変換（<font> を解釈し、日本語フォント適用）
+                    row_data = [Paragraph(str(cell), compact_style) for cell in row_data]
                     
                     data.append(row_data)
                 
