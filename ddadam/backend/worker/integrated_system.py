@@ -1204,9 +1204,9 @@ class IntegratedTournamentSystem:
                             school = f'<font color="red">{corrected_data.get("出身校", school)}</font>'
                     
                     row_data = [
-                        self._truncate_text(no, 3),  # No
-                        self._truncate_text(player_name, 8),  # 選手名
-                        self._truncate_text(kana_name, 8),  # カナ名
+                        self._truncate_text(no, 10),  # No（10文字まで表示）
+                        self._truncate_text(player_name, 30),  # 選手名（30文字まで表示）
+                        self._truncate_text(kana_name, 30),  # カナ名（30文字まで表示）
                         self._truncate_text(department, 6),  # 学部
                         self._truncate_text(grade, 3),  # 学年
                         self._truncate_text(height, 5),  # 身長
@@ -1218,8 +1218,8 @@ class IntegratedTournamentSystem:
                     
                     data.append(row_data)
                 
-                # テーブル作成（A4縦向き最適化）- 選手名・カナ名の列幅を倍に
-                col_widths = [8*mm, 36*mm, 36*mm, 12*mm, 8*mm, 10*mm, 8*mm, 12*mm, 20*mm, 8*mm]
+                # テーブル作成（A4縦向き最適化）- 選手名・カナ名の列幅を拡大
+                col_widths = [20*mm, 50*mm, 50*mm, 12*mm, 8*mm, 10*mm, 8*mm, 12*mm, 20*mm, 8*mm]
                 
                 # 行の高さを固定で設定（final_100_output.pdfと同じ設定）
                 row_heights = [10] + [7] * (len(data) - 1)  # ヘッダー10pt、データ行7pt
