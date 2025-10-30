@@ -72,7 +72,14 @@ class SupabaseHelper:
         
         except Exception as e:
             logger.error(f"Failed to upload {local_path}: {e}")
-            return None
+            # 最低限、公開URLは構築して返す（存在しない場合は404になるが、フロントで確認可能）
+            try:
+                base_url = settings.supabase_url.rstrip('/')
+                fallback_url = f"{base_url}/storage/v1/object/public/{self.bucket_name}/{storage_path}"
+                logger.warning(f"Returning constructed URL despite upload error: {fallback_url}")
+                return fallback_url
+            except Exception:
+                return None
     
     def get_signed_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:
         """

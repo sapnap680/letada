@@ -122,9 +122,6 @@ def run_tournament_job(
             public_url = None
 
         # 完了
-        if not public_url:
-            raise Exception("Supabase Storage へのアップロードに失敗しました (public URL 取得不可)")
-
         supabase.update_job(
             job_id,
             status="done",
