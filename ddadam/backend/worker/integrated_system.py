@@ -109,8 +109,8 @@ class IntegratedTournamentSystem:
                 
                 # MS 明朝
                 if not hasattr(self, 'default_font'):
-                try:
-                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                    try:
+                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
                         print("✅ MS-Mincho フォント登録成功")
                     except Exception as e:
@@ -118,8 +118,8 @@ class IntegratedTournamentSystem:
                 
                 # メイリオ
                 if not hasattr(self, 'default_font'):
-                try:
-                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                    try:
+                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
                         print("✅ Meiryo フォント登録成功")
                     except Exception as e:
