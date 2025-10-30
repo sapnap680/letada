@@ -19,7 +19,7 @@ import multiprocessing
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 pdf_worker_main = None
 try:
-    from integrated_system_worker import pdf_worker_main
+from integrated_system_worker import pdf_worker_main
 except ImportError:
     pass
 from io import StringIO
@@ -109,8 +109,8 @@ class IntegratedTournamentSystem:
                 
                 # MS 明朝
                 if not hasattr(self, 'default_font'):
-                    try:
-                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                try:
+                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
                         print("✅ MS-Mincho フォント登録成功")
                     except Exception as e:
@@ -118,8 +118,8 @@ class IntegratedTournamentSystem:
                 
                 # メイリオ
                 if not hasattr(self, 'default_font'):
-                    try:
-                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                try:
+                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
                         print("✅ Meiryo フォント登録成功")
                     except Exception as e:
@@ -372,7 +372,7 @@ class IntegratedTournamentSystem:
                                 csv_text = csv_response.content.decode('utf-8-sig')
                             else:
                                 csv_text = csv_response.content.decode(encoding)
-                            df = pd.read_csv(StringIO(csv_text))
+                        df = pd.read_csv(StringIO(csv_text))
                             print(f"✅ CSV {i+1} エンコーディング成功: {encoding}")
                             break
                         except (UnicodeDecodeError, pd.errors.ParserError, UnicodeError) as e:
@@ -755,9 +755,9 @@ class IntegratedTournamentSystem:
         print(f"🔍 JBA照合開始: {player_name} ({univ})")
         start_time = time.time()
         try:
-            verification_result = self.jba_system.verify_player_info(
-                player_name, None, univ, get_details=True, threshold=1.0
-            )
+        verification_result = self.jba_system.verify_player_info(
+            player_name, None, univ, get_details=True, threshold=1.0
+        )
             print(f"✅ JBA照合完了: {player_name} -> {verification_result['status']}")
         except Exception as e:
             print(f"❌ JBA照合エラー: {player_name} - {e}")
@@ -1121,6 +1121,33 @@ class IntegratedTournamentSystem:
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
+        # 長いテキスト用の小さなフォントスタイル（選手名、カナ名用 - 20文字入るように）
+        small_compact_style = ParagraphStyle(
+            'SmallCompact',
+            parent=styles['Normal'],
+            fontSize=4.5,  # 選手名・カナ名用（20文字入るように）
+            leading=4.5,   # 行間をさらに縮小
+            fontName=getattr(self, 'default_font', 'MS-Gothic')
+        )
+        
+        # 学部用の小さなフォントスタイル（15文字入るように）
+        department_compact_style = ParagraphStyle(
+            'DepartmentCompact',
+            parent=styles['Normal'],
+            fontSize=4.2,  # 学部用（15文字入るように）
+            leading=4.2,   # 行間をさらに縮小
+            fontName=getattr(self, 'default_font', 'MS-Gothic')
+        )
+        
+        # 出身校用のさらに小さなフォントスタイル（25文字入るように）
+        extra_small_compact_style = ParagraphStyle(
+            'ExtraSmallCompact',
+            parent=styles['Normal'],
+            fontSize=4,  # 出身校用（25文字入るように）
+            leading=4,   # 行間をさらに縮小
+            fontName=getattr(self, 'default_font', 'MS-Gothic')
+        )
+        
         title_style = ParagraphStyle(
             'TitleCompact',
             parent=styles['Title'],
@@ -1180,11 +1207,12 @@ class IntegratedTournamentSystem:
                     height = d.get("身長", "")
                     weight = d.get("体重", "")
                     
-                    # 身長・体重の小数点以下を切り捨て（単位付きも対応）
+                    # 身長・体重・学年の小数点以下を切り捨て（単位付きも対応）
+                    import re
+                    
                     if height:
                         height_str = str(height)
                         # 数値部分を抽出して小数点以下を切り捨て
-                        import re
                         height_match = re.search(r'(\d+(?:\.\d+)?)', height_str)
                         if height_match:
                             try:
@@ -1206,6 +1234,16 @@ class IntegratedTournamentSystem:
                                 weight = f"{weight_num}{unit}" if unit else str(weight_num)
                             except (ValueError, TypeError):
                                 pass
+                    if grade:
+                        grade_str = str(grade)
+                        # 学年の小数点以下を切り捨て
+                        grade_match = re.search(r'(\d+(?:\.\d+)?)', grade_str)
+                        if grade_match:
+                            try:
+                                grade_num = int(float(grade_match.group(1)))
+                                grade = str(grade_num)
+                            except (ValueError, TypeError):
+                                pass
                     position = d.get("ポジション", "")
                     school = d.get("出身校", "")
                     
@@ -1221,7 +1259,18 @@ class IntegratedTournamentSystem:
                         if corrected_data.get("学部") != department:
                             department = f'<font color="red">{corrected_data.get("学部", department)}</font>'
                         if corrected_data.get("学年") != grade:
-                            grade = f'<font color="red">{corrected_data.get("学年", grade)}</font>'
+                            corrected_grade = corrected_data.get("学年", grade)
+                            # 修正された学年も小数点以下を切り捨て
+                            if corrected_grade:
+                                corrected_grade_str = str(corrected_grade)
+                                corrected_grade_match = re.search(r'(\d+(?:\.\d+)?)', corrected_grade_str)
+                                if corrected_grade_match:
+                                    try:
+                                        corrected_grade_num = int(float(corrected_grade_match.group(1)))
+                                        corrected_grade = str(corrected_grade_num)
+                                    except (ValueError, TypeError):
+                                        pass
+                            grade = f'<font color="red">{corrected_grade}</font>'
                         if corrected_data.get("身長") != height:
                             corrected_height = corrected_data.get("身長", height)
                             # 修正された身長も小数点以下を切り捨て（単位付きも対応）
@@ -1258,24 +1307,35 @@ class IntegratedTournamentSystem:
                     # 数値系はタグを壊さないようにトリムせずにそのまま出力
                     row_data = [
                         self._truncate_text(no, 10),  # No（10文字まで表示）
-                        self._truncate_text(player_name, 30),  # 選手名（30文字まで表示）
-                        self._truncate_text(kana_name, 30),  # カナ名（30文字まで表示）
-                        self._truncate_text(department, 6),  # 学部
+                        self._truncate_text(player_name, 20),  # 選手名（20文字まで表示）
+                        self._truncate_text(kana_name, 20),  # カナ名（20文字まで表示）
+                        self._truncate_text(department, 15),  # 学部（15文字まで表示）
                         self._truncate_text(grade, 3),  # 学年
                         str(height),  # 身長（小数切り捨て済みをそのまま出力）
                         str(weight),  # 体重（小数切り捨て済みをそのまま出力）
                         self._truncate_text(position, 6),  # ポジション
-                        self._truncate_text(school, 10),  # 出身校
+                        self._truncate_text(school, 25),  # 出身校（25文字まで表示）
                         status_symbol  # JBA登録状況
                     ]
 
                     # すべてのセルを Paragraph に変換（<font> を解釈し、日本語フォント適用）
-                    row_data = [Paragraph(str(cell), compact_style) for cell in row_data]
+                    # 特定の列に適切なフォントサイズを適用
+                    formatted_row_data = []
+                    for i, cell in enumerate(row_data):
+                        if i in [1, 2]:  # 選手名(1)、カナ名(2)の列 - 20文字入るように
+                            formatted_row_data.append(Paragraph(str(cell), small_compact_style))
+                        elif i == 3:  # 学部(3)の列 - 15文字入るように
+                            formatted_row_data.append(Paragraph(str(cell), department_compact_style))
+                        elif i == 8:  # 出身校(8)の列 - 25文字入るように
+                            formatted_row_data.append(Paragraph(str(cell), extra_small_compact_style))
+                        else:
+                            formatted_row_data.append(Paragraph(str(cell), compact_style))
+                    row_data = formatted_row_data
                     
                     data.append(row_data)
                 
-                # テーブル作成（A4縦向き最適化）- 選手名・カナ名の列幅を拡大
-                col_widths = [20*mm, 50*mm, 50*mm, 12*mm, 8*mm, 10*mm, 8*mm, 12*mm, 20*mm, 8*mm]
+                # テーブル作成（A4縦向き最適化）- 文字数と列幅のバランスを最適化
+                col_widths = [16*mm, 35*mm, 35*mm, 26*mm, 8*mm, 12*mm, 10*mm, 15*mm, 40*mm, 8*mm]
                 
                 # 行の高さを固定で設定（final_100_output.pdfと同じ設定）
                 row_heights = [10] + [7] * (len(data) - 1)  # ヘッダー10pt、データ行7pt
@@ -1286,7 +1346,7 @@ class IntegratedTournamentSystem:
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor('#4472C4')),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),  # 上揃えに変更
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),  # 中央揃えに変更
                 ("FONTNAME", (0, 0), (-1, 0), getattr(self, 'default_font', 'MS-Gothic')),
                 ("FONTSIZE", (0, 0), (-1, 0), 5),  # ヘッダーフォントサイズ（final_100_outputと同じ）
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 2),  # ヘッダーパディング（final_100_outputと同じ）
@@ -1301,10 +1361,10 @@ class IntegratedTournamentSystem:
                 ("LINEBELOW", (0, 0), (-1, 0), 1, colors.black),
                     
                 # パディング調整（文字がテーブル内に正しく配置されるように）
-                ("TOPPADDING", (0, 1), (-1, -1), 1),  # 上部パディングを少し追加
-                ("BOTTOMPADDING", (0, 1), (-1, -1), 1),  # 下部パディングを少し追加
-                ("LEFTPADDING", (0, 0), (-1, -1), 1),  # 左パディングを少し追加
-                ("RIGHTPADDING", (0, 0), (-1, -1), 1),  # 右パディングを少し追加
+                ("TOPPADDING", (0, 1), (-1, -1), 2),  # 上部パディングを調整
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 2),  # 下部パディングを調整
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),  # 左パディングを調整
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),  # 右パディングを調整
                 ]))
                 
                 elements.append(table)
@@ -1362,17 +1422,17 @@ class IntegratedTournamentSystem:
                 self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
                 raise
         else:
-            try:
-                ctx = multiprocessing.get_context("spawn")
-                proc = ctx.Process(
-                    target=pdf_worker_main,
-                    args=(serializable_reports, output_filename, job_meta_path),
-                    daemon=False
-                )
-                proc.start()
-            except Exception as e:
-                # 失敗したら job_meta にエラーを書き込む
-                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+        try:
+            ctx = multiprocessing.get_context("spawn")
+            proc = ctx.Process(
+                target=pdf_worker_main,
+                args=(serializable_reports, output_filename, job_meta_path),
+                daemon=False
+            )
+            proc.start()
+        except Exception as e:
+            # 失敗したら job_meta にエラーを書き込む
+            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
             raise
 
         return job_meta_path
