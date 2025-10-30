@@ -372,7 +372,7 @@ class IntegratedTournamentSystem:
                                 csv_text = csv_response.content.decode('utf-8-sig')
                             else:
                                 csv_text = csv_response.content.decode(encoding)
-                        df = pd.read_csv(StringIO(csv_text))
+                            df = pd.read_csv(StringIO(csv_text))
                             print(f"✅ CSV {i+1} エンコーディング成功: {encoding}")
                             break
                         except (UnicodeDecodeError, pd.errors.ParserError, UnicodeError) as e:
