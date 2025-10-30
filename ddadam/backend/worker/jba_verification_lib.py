@@ -71,6 +71,29 @@ class JBAVerificationSystem:
         })
         self.logged_in = False
     
+    def _log_response(self, response, url):
+        try:
+            content_type = response.headers.get('Content-Type', '')
+        except Exception:
+            content_type = ''
+        try:
+            text_head = (response.text or '')[:200]
+        except Exception:
+            text_head = ''
+        msg = f"JBA HTTP {getattr(response.request, 'method', 'GET')} {url} status={response.status_code} ct={content_type} head={text_head}"
+        try:
+            self.logger.info(msg)
+        finally:
+            # Ensure logs appear on Railway even if logging is buffered
+            print(msg, flush=True)
+    
+    def _request(self, method, url, **kwargs):
+        timeout = kwargs.pop('timeout', 10)
+        allow_redirects = kwargs.pop('allow_redirects', True)
+        response = self.session.request(method, url, timeout=timeout, allow_redirects=allow_redirects, **kwargs)
+        self._log_response(response, url)
+        return response
+    
     def get_current_fiscal_year(self):
         """現在の年度を取得"""
         current_year = datetime.now().year
@@ -137,7 +160,7 @@ class JBAVerificationSystem:
             # Status placeholder update removed
             # Progress update removed
             
-            login_page = self.session.get("https://team-jba.jp/login")
+            login_page = self._request("GET", "https://team-jba.jp/login")
             soup = BeautifulSoup(login_page.content, 'html.parser')
             
             csrf_token = ""
@@ -155,7 +178,7 @@ class JBAVerificationSystem:
             }
             
             login_url = "https://team-jba.jp/login/done"
-            login_response = self.session.post(login_url, data=login_data, allow_redirects=True)
+            login_response = self._request("POST", login_url, data=login_data, allow_redirects=True)
             
             # Status placeholder update removed
             # Progress update removed
@@ -197,7 +220,7 @@ class JBAVerificationSystem:
             
             # 検索ページにアクセスしてCSRFトークンを取得
             search_url = "https://team-jba.jp/organization/15250600/team/search"
-            search_page = self.session.get(search_url)
+            search_page = self._request("GET", search_url)
             
             if search_page.status_code != 200:
                 # 検索ページにアクセスできません
@@ -232,8 +255,9 @@ class JBAVerificationSystem:
             }
             
             # 検索リクエストを送信（JSON APIとして）
-            search_response = self.session.post(
-                search_url, 
+            search_response = self._request(
+                "POST",
+                search_url,
                 data=form_data,
                 headers=headers
             )
@@ -244,6 +268,11 @@ class JBAVerificationSystem:
             
             # JSONレスポンスを解析
             try:
+                ct = search_response.headers.get('Content-Type', '')
+                head = (search_response.text or '')[:1]
+                if 'json' not in ct and head not in ['{', '[']:
+                    # HTMLなどJSON以外が返ってきた
+                    return []
                 data = search_response.json()
                 teams = []
                 
@@ -284,7 +313,7 @@ class JBAVerificationSystem:
             
             # 検索ページにアクセスしてCSRFトークンを取得
             search_url = "https://team-jba.jp/organization/15250600/team/search"
-            search_page = self.session.get(search_url)
+            search_page = self._request("GET", search_url)
             
             if search_page.status_code != 200:
                 return []
@@ -318,8 +347,9 @@ class JBAVerificationSystem:
             }
             
             # 検索リクエストを送信（JSON APIとして）
-            search_response = self.session.post(
-                search_url, 
+            search_response = self._request(
+                "POST",
+                search_url,
                 data=form_data,
                 headers=headers
             )
@@ -357,7 +387,7 @@ class JBAVerificationSystem:
             logger.info(f"🔍 チームURL: {team_url}")
             
             # チーム詳細ページにアクセス
-            team_page = self.session.get(team_url)
+            team_page = self._request("GET", team_url)
             
             if team_page.status_code != 200:
                 # チームページにアクセスできません
@@ -436,7 +466,7 @@ class JBAVerificationSystem:
         """チームのメンバー情報を取得（静かな実行版 - st.*出力なし）"""
         try:
             # チーム詳細ページにアクセス
-            team_page = self.session.get(team_url)
+            team_page = self._request("GET", team_url)
             
             if team_page.status_code != 200:
                 return {"team_name": "Error", "members": []}
@@ -521,7 +551,7 @@ class JBAVerificationSystem:
             # 選手詳細情報を取得中
             
             # 選手詳細ページにアクセス
-            detail_page = self.session.get(detail_url)
+            detail_page = self._request("GET", detail_url)
             
             if detail_page.status_code != 200:
                 # 選手詳細ページにアクセスできません
