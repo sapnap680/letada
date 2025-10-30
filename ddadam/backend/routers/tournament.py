@@ -117,7 +117,7 @@ def run_tournament_job(
         
         logger.info(f"✅ PDF生成完了: {pdf_path}")
         logger.info(f"📁 PDF保存場所: {output_dir}")
-        logger.info(f"📄 ファイル名: {pdf_filename}")
+        logger.info(f"📄 ファイル名: {pdf_filename_local}")
 
         # Supabase Storage にアップロード（ヘルパーにアップロード関数がある場合）
         public_url = None
