@@ -1422,18 +1422,18 @@ class IntegratedTournamentSystem:
                 self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
                 raise
         else:
-        try:
-            ctx = multiprocessing.get_context("spawn")
-            proc = ctx.Process(
-                target=pdf_worker_main,
-                args=(serializable_reports, output_filename, job_meta_path),
-                daemon=False
-            )
-            proc.start()
-        except Exception as e:
-            # 失敗したら job_meta にエラーを書き込む
-            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
-            raise
+            try:
+                ctx = multiprocessing.get_context("spawn")
+                proc = ctx.Process(
+                    target=pdf_worker_main,
+                    args=(serializable_reports, output_filename, job_meta_path),
+                    daemon=False
+                )
+                proc.start()
+            except Exception as e:
+                # 失敗したら job_meta にエラーを書き込む
+                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+                raise
 
         return job_meta_path
 
