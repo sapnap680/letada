@@ -64,13 +64,9 @@ class SupabaseHelper:
             )
             
             # 公開URLを取得
-            public_resp = self.client.storage.from_(self.bucket_name).get_public_url(storage_path)
-            public_url = None
-            if isinstance(public_resp, dict):
-                public_url = public_resp.get('publicUrl') or public_resp.get('publicURL')
-            elif isinstance(public_resp, str):
-                public_url = public_resp
-            
+            # SDKの戻り値に依存せず、環境変数のURLから公開URLを構築
+            base_url = settings.supabase_url.rstrip('/')
+            public_url = f"{base_url}/storage/v1/object/public/{self.bucket_name}/{storage_path}"
             logger.info(f"Uploaded {local_path} to {storage_path}. public_url={public_url}")
             return public_url
         

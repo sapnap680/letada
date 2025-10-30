@@ -115,10 +115,10 @@ def run_tournament_job(
 
         # Supabase Storage にアップロード（ヘルパーにアップロード関数がある場合）
         public_url = None
+        storage_path = f"reports/{pdf_filename}"
         try:
-            storage_path = f"reports/{pdf_filename}"
             public_url = supabase.upload_file(pdf_path, storage_path)
-        except Exception as _:
+        except Exception:
             public_url = None
 
         # 完了
