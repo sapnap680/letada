@@ -1130,21 +1130,21 @@ class IntegratedTournamentSystem:
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
-        # 学部用の小さなフォントスタイル（15文字入るように）
-        department_compact_style = ParagraphStyle(
-            'DepartmentCompact',
-            parent=styles['Normal'],
-            fontSize=4.2,  # 学部用（15文字入るように）
-            leading=4.2,   # 行間をさらに縮小
-            fontName=getattr(self, 'default_font', 'MS-Gothic')
-        )
-        
         # 出身校用のさらに小さなフォントスタイル（25文字入るように）
         extra_small_compact_style = ParagraphStyle(
             'ExtraSmallCompact',
             parent=styles['Normal'],
             fontSize=4,  # 出身校用（25文字入るように）
             leading=4,   # 行間をさらに縮小
+            fontName=getattr(self, 'default_font', 'MS-Gothic')
+        )
+
+        # 学部用の小さなフォントスタイル（15文字入るように）
+        department_compact_style = ParagraphStyle(
+            'DepartmentCompact',
+            parent=styles['Normal'],
+            fontSize=4.0,  # 学部用（15文字入るように）
+            leading=4.0,   # 行間をさらに縮小
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
