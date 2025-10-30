@@ -97,12 +97,15 @@ def run_tournament_job(
         # PDF生成
         supabase.update_job(job_id, message="PDFを生成中...", progress=0.7)
 
-        # PDFをデスクトップに保存（わかりやすい場所）
+        # 出力先ディレクトリ（ローカル: Desktop / サーバ: settings.output_dir）
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        output_dir = os.path.join(desktop_path, "JBA照合結果")
+        base_dir = desktop_path if os.path.isdir(desktop_path) else settings.output_dir
+        output_dir = os.path.join(base_dir, "JBA照合結果")
         os.makedirs(output_dir, exist_ok=True)
-        pdf_filename = f"JBA照合結果_大会{game_id}_{job_id[:8]}.pdf"
-        pdf_path = os.path.join(output_dir, pdf_filename)
+        # ローカル保存用とStorage公開用のファイル名を分離
+        pdf_filename_local = f"JBA照合結果_大会{game_id}_{job_id[:8]}.pdf"
+        pdf_filename_public = f"tournament_{game_id}_{job_id[:8]}.pdf"
+        pdf_path = os.path.join(output_dir, pdf_filename_local)
 
         # 結果から大学別レポートを作成し、1ファイルに統合してPDF生成
         reports = system.create_university_reports(result_df)
@@ -115,7 +118,8 @@ def run_tournament_job(
         # Supabase Storage にアップロード（ヘルパーにアップロード関数がある場合）
         public_url = None
         try:
-            public_url = supabase.upload_file(pdf_path, f"reports/{pdf_filename}")
+            # 期待する公開パス: outputs/reports/<file>
+            public_url = supabase.upload_file(pdf_path, f"outputs/reports/{pdf_filename_public}")
         except Exception as _:
             public_url = None
 
@@ -125,6 +129,7 @@ def run_tournament_job(
             status="done",
             progress=1.0,
             message=f"処理が完了しました（{len(universities)}大学）",
+            # 可能であれば公開URLを優先
             output_path=public_url or pdf_path,
         )
         logger.info(f"✅ 大会ジョブ完了: {job_id}")
