@@ -685,6 +685,17 @@ class JBAVerificationSystem:
     def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None):
         """個別選手情報の照合（男子チームのみ）"""
         try:
+            # ===== デバッグ出力（受信パラメータ） =====
+            logger.info("=" * 60)
+            logger.info("📋 受信データ:")
+            logger.info(f"  player_name: '{player_name}' (type: {type(player_name)})")
+            logger.info(f"  birth_date: '{birth_date}' (type: {type(birth_date)})")
+            logger.info(f"  university: '{university}' (type: {type(university)})")
+            logger.info(f"  player_no: '{player_no}' (type: {type(player_no)})")
+            logger.info(f"  threshold: {threshold}")
+            logger.info("=" * 60)
+            # ======================================
+
             logger.info(f"🔍 選手照合: {player_name}, 大学: {university}")
             
             # Noがない人（コーチ）の場合はJBA登録があるかだけ確認
@@ -720,8 +731,12 @@ class JBAVerificationSystem:
             teams = []
             for variation in search_variations:
                 logger.info(f"🔍 チーム検索開始: {variation}")
-                teams = self.search_teams_by_university(variation)
-                logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
+                try:
+                    teams = self.search_teams_by_university(variation)
+                    logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
+                except Exception as e:
+                    logger.error(f"❌ search_teams_by_university でエラー: {e}", exc_info=True)
+                    continue
                 
                 if teams:
                     # チームが見つかりました
@@ -737,7 +752,11 @@ class JBAVerificationSystem:
             # 各チームのメンバー情報を取得して照合
             for team in teams:
                 logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
-                team_data = self.get_team_members(team['url'])
+                try:
+                    team_data = self.get_team_members(team['url'])
+                except Exception as e:
+                    logger.error(f"❌ get_team_members でエラー (team={team.get('name')}, url={team.get('url')}): {e}", exc_info=True)
+                    continue
                 
                 if team_data and team_data["members"]:
                     logger.info(f"🔍 メンバー数: {len(team_data['members'])}人")

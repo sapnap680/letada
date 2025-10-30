@@ -19,7 +19,7 @@ import multiprocessing
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 pdf_worker_main = None
 try:
-    from integrated_system_worker import pdf_worker_main
+from integrated_system_worker import pdf_worker_main
 except ImportError:
     pass
 from io import StringIO
@@ -80,6 +80,63 @@ class IntegratedTournamentSystem:
         
         # 日本語フォントを登録
         self._register_japanese_fonts()
+
+    def _debug_csv_data(self, df, university_name):
+        """CSVデータの内容を詳細にログ出力"""
+        try:
+            self.logger.info("=" * 80)
+            self.logger.info("📊 CSV データ診断")
+            self.logger.info("=" * 80)
+            if df is None:
+                self.logger.error("❌ DataFrame が None です")
+                return
+            self.logger.info(f"行数: {len(df)}")
+            self.logger.info(f"列数: {len(df.columns)}")
+            self.logger.info(f"列名: {df.columns.tolist()}")
+            # 最初の3行
+            self.logger.info("\n最初の3行:")
+            for idx, row in df.head(3).iterrows():
+                self.logger.info(f"\n--- 行 {idx} ---")
+                for col in df.columns:
+                    value = row[col]
+                    try:
+                        is_na = pd.isna(value)
+                    except Exception:
+                        is_na = False
+                    self.logger.info(f"  {col}: '{value}' (type: {type(value)}, isna: {is_na})")
+            # 選手名列
+            name_columns = ['選手名', '氏名', 'name', 'Name', 'プレイヤー名', 'player_name']
+            found_name_col = next((c for c in name_columns if c in df.columns), None)
+            if found_name_col:
+                self.logger.info(f"\n✅ 選手名列を検出: '{found_name_col}'")
+                self.logger.info(f"   サンプル値: {df[found_name_col].head(3).tolist()}")
+            else:
+                self.logger.error("❌ 選手名列が見つかりません！")
+                self.logger.error(f"   利用可能な列: {df.columns.tolist()}")
+            # 大学名
+            self.logger.info(f"\n🏫 大学名: '{university_name}' (type: {type(university_name)})")
+            if not university_name or pd.isna(university_name):
+                self.logger.error("❌ 大学名が空です！")
+            # No列
+            no_columns = ['No', 'No.', 'no', '番号', '背番号']
+            found_no_col = next((c for c in no_columns if c in df.columns), None)
+            if found_no_col:
+                empty_count = df[found_no_col].isna().sum()
+                self.logger.info(f"\n✅ No列を検出: '{found_no_col}'")
+                self.logger.info(f"   サンプル値: {df[found_no_col].head(5).tolist()}")
+                self.logger.info(f"   空白/NaN: {empty_count}件")
+            else:
+                self.logger.warning("⚠️ No列が見つかりません")
+            # 文字列列の前後空白
+            self.logger.info("\n🧹 データクリーニング必要箇所:")
+            for col in df.columns:
+                if df[col].dtype == object:
+                    has_ws = df[col].apply(lambda x: isinstance(x, str) and (x != x.strip())).sum()
+                    if has_ws > 0:
+                        self.logger.warning(f"  - '{col}': {has_ws}件に前後空白あり")
+            self.logger.info("=" * 80)
+        except Exception as e:
+            self.logger.error(f"CSVデバッグ出力中にエラー: {e}", exc_info=True)
     
     def _register_japanese_fonts(self):
         """日本語フォントを登録"""
@@ -109,8 +166,8 @@ class IntegratedTournamentSystem:
                 
                 # MS 明朝
                 if not hasattr(self, 'default_font'):
-                    try:
-                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                try:
+                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
                         print("✅ MS-Mincho フォント登録成功")
                     except Exception as e:
@@ -118,8 +175,8 @@ class IntegratedTournamentSystem:
                 
                 # メイリオ
                 if not hasattr(self, 'default_font'):
-                    try:
-                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                try:
+                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
                         print("✅ Meiryo フォント登録成功")
                     except Exception as e:
@@ -432,6 +489,8 @@ class IntegratedTournamentSystem:
                     
                     # 大学名をDataFrameに追加
                     df['大学名'] = university_name
+                    # CSVデバッグ出力
+                    self._debug_csv_data(df, university_name)
                     all_universities_data.append(df)
                     
                     print(f"✅ CSV {i+1} 取得成功")
@@ -447,6 +506,8 @@ class IntegratedTournamentSystem:
                 # 全大学のデータを結合
                 combined_df = pd.concat(all_universities_data, ignore_index=True)
                 print(f"✅ {len(all_universities_data)} 大学のデータを取得しました")
+                # 結合後のデバッグ出力
+                self._debug_csv_data(combined_df, "(combined)")
                 return combined_df
             else:
                 return None
@@ -755,9 +816,9 @@ class IntegratedTournamentSystem:
         print(f"🔍 JBA照合開始: {player_name} ({univ})")
         start_time = time.time()
         try:
-            verification_result = self.jba_system.verify_player_info(
-                player_name, None, univ, get_details=True, threshold=1.0
-            )
+        verification_result = self.jba_system.verify_player_info(
+            player_name, None, univ, get_details=True, threshold=1.0
+        )
             print(f"✅ JBA照合完了: {player_name} -> {verification_result['status']}")
         except Exception as e:
             print(f"❌ JBA照合エラー: {player_name} - {e}")
@@ -1422,18 +1483,18 @@ class IntegratedTournamentSystem:
                 self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
                 raise
         else:
-            try:
-                ctx = multiprocessing.get_context("spawn")
-                proc = ctx.Process(
-                    target=pdf_worker_main,
-                    args=(serializable_reports, output_filename, job_meta_path),
-                    daemon=False
-                )
-                proc.start()
-            except Exception as e:
-                # 失敗したら job_meta にエラーを書き込む
-                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
-                raise
+        try:
+            ctx = multiprocessing.get_context("spawn")
+            proc = ctx.Process(
+                target=pdf_worker_main,
+                args=(serializable_reports, output_filename, job_meta_path),
+                daemon=False
+            )
+            proc.start()
+        except Exception as e:
+            # 失敗したら job_meta にエラーを書き込む
+            self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
+            raise
 
         return job_meta_path
 
