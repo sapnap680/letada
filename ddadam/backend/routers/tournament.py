@@ -40,25 +40,30 @@ def run_tournament_job(
     from config import settings
     supabase = get_supabase_helper()
     
+    current_step = "init"
     try:
         # ジョブ開始（Supabase）
-        supabase.update_job(job_id, status="processing", progress=0.0, message="大会CSVを取得中...")
+        current_step = "queue_to_processing"
+        supabase.update_job(job_id, status="processing", progress=0.0, message="大会CSVを取得中...", metadata={"step": current_step})
 
         # JBAシステム初期化（選手検索用）
+        current_step = "init_jba_system"
         from worker.jba_verification_lib import JBAVerificationSystem, DataValidator
         
         jba_system = JBAVerificationSystem()
         validator = DataValidator()
         
         # JBAログイン（選手検索用）
+        current_step = "jba_login"
         logger.info("JBAログイン中（選手検索用）...")
         print(f"🔐 JBAログイン試行: {jba_credentials['email']}")
         login_success = jba_system.login(jba_credentials["email"], jba_credentials["password"])
         print(f"🔐 JBAログイン結果: {'成功' if login_success else '失敗'}")
         if not login_success:
-            raise Exception("JBAログインに失敗しました")
+            raise Exception("JBAログインに失敗しました（メール/パスワードをご確認ください）")
         
         # システム初期化
+        current_step = "init_tournament_system"
         system = IntegratedTournamentSystem(
             jba_system=jba_system,
             validator=validator,
@@ -67,7 +72,8 @@ def run_tournament_job(
         )
         
         # 管理画面ログインしてCSV取得（環境変数から認証情報を取得）
-        supabase.update_job(job_id, message=f"大会ID {game_id} のCSVを取得中...", progress=0.1)
+        current_step = "fetch_tournament_csv"
+        supabase.update_job(job_id, message=f"大会ID {game_id} のCSVを取得中...", progress=0.1, metadata={"step": current_step})
         
         logger.info(f"管理画面ログイン: {settings.admin_username}")
         
@@ -78,24 +84,27 @@ def run_tournament_job(
         )
         
         if combined_df is None or combined_df.empty:
-            raise Exception("大会データの取得に失敗しました")
+            raise Exception("大会データの取得に失敗しました（CSVリンクが見つからない/アクセス不可）")
         
         # 取得した大学数を記録
+        current_step = "csv_parsed"
         universities = combined_df['大学名'].unique().tolist()
-        supabase.update_job(job_id, metadata={"universities": universities, "total_universities": len(universities), "total_rows": len(combined_df)})
+        supabase.update_job(job_id, metadata={"universities": universities, "total_universities": len(universities), "total_rows": len(combined_df), "step": current_step})
         
         logger.info(f"✅ 大会データ取得完了: {len(universities)}大学, {len(combined_df)}行")
         
         # JBA照合処理
-        supabase.update_job(job_id, message=f"JBA照合処理中...（{len(universities)}大学）", progress=0.3)
+        current_step = "verification"
+        supabase.update_job(job_id, message=f"JBA照合処理中...（{len(universities)}大学）", progress=0.3, metadata={"step": current_step})
         
         result_df = system.process_tournament_data(combined_df)
         
         if result_df is None:
-            raise Exception("JBA照合処理に失敗しました")
+            raise Exception("JBA照合処理に失敗しました（内部処理エラー）")
         
         # PDF生成
-        supabase.update_job(job_id, message="PDFを生成中...", progress=0.7)
+        current_step = "pdf_generate"
+        supabase.update_job(job_id, message="PDFを生成中...", progress=0.7, metadata={"step": current_step})
 
         # PDFの保存先（アプリ用の出力ディレクトリに変更）
         from config import settings
@@ -114,20 +123,24 @@ def run_tournament_job(
         logger.info(f"📄 ファイル名: {pdf_filename}")
 
         # Supabase Storage にアップロード（ヘルパーにアップロード関数がある場合）
+        current_step = "upload"
         public_url = None
         storage_path = f"reports/{pdf_filename}"
         try:
             public_url = supabase.upload_file(pdf_path, storage_path)
-        except Exception:
+        except Exception as upload_err:
+            logger.error(f"Upload failed: {upload_err}")
             public_url = None
 
         # 完了
+        current_step = "done"
         supabase.update_job(
             job_id,
             status="done",
             progress=1.0,
             message=f"処理が完了しました（{len(universities)}大学）",
             output_path=public_url,
+            metadata={"step": current_step, "storage_path": storage_path}
         )
         logger.info(f"✅ 大会ジョブ完了: {job_id}")
         
@@ -139,9 +152,10 @@ def run_tournament_job(
             job_id,
             status="error",
             progress=0.0,
-            message="エラーが発生しました",
+            message=f"エラー: {str(e)}",
             error=str(e),
             error_detail=error_traceback,
+            metadata={"step": current_step}
         )
 
 
