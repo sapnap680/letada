@@ -97,9 +97,10 @@ def run_tournament_job(
         # PDF生成
         supabase.update_job(job_id, message="PDFを生成中...", progress=0.7)
 
-        # PDFをデスクトップに保存（わかりやすい場所）
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        output_dir = os.path.join(desktop_path, "JBA照合結果")
+        # PDFの保存先（アプリ用の出力ディレクトリに変更）
+        from config import settings
+        base_output_dir = getattr(settings, 'output_dir', 'outputs')
+        output_dir = os.path.join(base_output_dir, "reports")
         os.makedirs(output_dir, exist_ok=True)
         pdf_filename = f"JBA照合結果_大会{game_id}_{job_id[:8]}.pdf"
         pdf_path = os.path.join(output_dir, pdf_filename)
