@@ -99,7 +99,11 @@ def run_tournament_job(
 
         # 出力先ディレクトリ（ローカル: Desktop / サーバ: settings.output_dir）
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        base_dir = desktop_path if os.path.isdir(desktop_path) else settings.output_dir
+        # サーバ環境（RAILWAYなど）では常に settings.output_dir を使用
+        if os.getenv("RAILWAY") or os.getenv("RENDER") or os.getenv("VERCEL"):
+            base_dir = settings.output_dir
+        else:
+            base_dir = desktop_path if os.path.isdir(desktop_path) else settings.output_dir
         output_dir = os.path.join(base_dir, "JBA照合結果")
         os.makedirs(output_dir, exist_ok=True)
         # ローカル保存用とStorage公開用のファイル名を分離

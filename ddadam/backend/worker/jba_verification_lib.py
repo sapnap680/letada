@@ -257,7 +257,7 @@ class JBAVerificationSystem:
             # 検索リクエストを送信（JSON APIとして）
             search_response = self._request(
                 "POST",
-                search_url,
+                search_url, 
                 data=form_data,
                 headers=headers
             )
@@ -349,7 +349,7 @@ class JBAVerificationSystem:
             # 検索リクエストを送信（JSON APIとして）
             search_response = self._request(
                 "POST",
-                search_url,
+                search_url, 
                 data=form_data,
                 headers=headers
             )
