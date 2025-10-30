@@ -98,7 +98,6 @@ def run_tournament_job(
         supabase.update_job(job_id, message="PDFを生成中...", progress=0.7)
 
         # PDFをデスクトップに保存（わかりやすい場所）
-        import os
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
         output_dir = os.path.join(desktop_path, "JBA照合結果")
         os.makedirs(output_dir, exist_ok=True)
