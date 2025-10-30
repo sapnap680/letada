@@ -19,7 +19,7 @@ import multiprocessing
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 pdf_worker_main = None
 try:
-from integrated_system_worker import pdf_worker_main
+    from integrated_system_worker import pdf_worker_main
 except ImportError:
     pass
 from io import StringIO
@@ -109,8 +109,8 @@ class IntegratedTournamentSystem:
                 
                 # MS 明朝
                 if not hasattr(self, 'default_font'):
-                try:
-                    pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
+                    try:
+                        pdfmetrics.registerFont(TTFont('MS-Mincho', 'C:/Windows/Fonts/msmincho.ttc'))
                         self.default_font = 'MS-Mincho'
                         print("✅ MS-Mincho フォント登録成功")
                     except Exception as e:
@@ -118,8 +118,8 @@ class IntegratedTournamentSystem:
                 
                 # メイリオ
                 if not hasattr(self, 'default_font'):
-                try:
-                    pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
+                    try:
+                        pdfmetrics.registerFont(TTFont('Meiryo', 'C:/Windows/Fonts/meiryo.ttc'))
                         self.default_font = 'Meiryo'
                         print("✅ Meiryo フォント登録成功")
                     except Exception as e:
