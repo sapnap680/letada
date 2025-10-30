@@ -53,19 +53,25 @@ class SupabaseHelper:
                 file_data = f.read()
             
             # アップロード
+            logger.info(f"Uploading to Supabase bucket={self.bucket_name}, path={storage_path}")
             response = self.client.storage.from_(self.bucket_name).upload(
                 storage_path,
                 file_data,
                 file_options={
-                    "content-type": self._get_content_type(local_path),
+                    "contentType": self._get_content_type(local_path),  # supabase-py expects contentType
                     "upsert": True  # 既存ファイルがある場合は上書き
                 }
             )
             
             # 公開URLを取得
-            public_url = self.client.storage.from_(self.bucket_name).get_public_url(storage_path)
+            public_resp = self.client.storage.from_(self.bucket_name).get_public_url(storage_path)
+            public_url = None
+            if isinstance(public_resp, dict):
+                public_url = public_resp.get('publicUrl') or public_resp.get('publicURL')
+            elif isinstance(public_resp, str):
+                public_url = public_resp
             
-            logger.info(f"Uploaded {local_path} to {storage_path}")
+            logger.info(f"Uploaded {local_path} to {storage_path}. public_url={public_url}")
             return public_url
         
         except Exception as e:
