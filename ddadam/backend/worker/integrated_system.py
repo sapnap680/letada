@@ -19,7 +19,7 @@ import multiprocessing
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 pdf_worker_main = None
 try:
-from integrated_system_worker import pdf_worker_main
+    from integrated_system_worker import pdf_worker_main
 except ImportError:
     pass
 from io import StringIO
