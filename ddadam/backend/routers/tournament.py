@@ -102,7 +102,7 @@ def run_tournament_job(
         base_output_dir = getattr(settings, 'output_dir', 'outputs')
         output_dir = os.path.join(base_output_dir, "reports")
         os.makedirs(output_dir, exist_ok=True)
-        pdf_filename = f"JBA照合結果_大会{game_id}_{job_id[:8]}.pdf"
+        pdf_filename = f"tournament_{game_id}_{job_id[:8]}.pdf"
         pdf_path = os.path.join(output_dir, pdf_filename)
 
         # 結果から大学別レポートを作成し、1ファイルに統合してPDF生成
@@ -116,17 +116,21 @@ def run_tournament_job(
         # Supabase Storage にアップロード（ヘルパーにアップロード関数がある場合）
         public_url = None
         try:
-            public_url = supabase.upload_file(pdf_path, f"reports/{pdf_filename}")
+            storage_path = f"reports/{pdf_filename}"
+            public_url = supabase.upload_file(pdf_path, storage_path)
         except Exception as _:
             public_url = None
 
         # 完了
+        if not public_url:
+            raise Exception("Supabase Storage へのアップロードに失敗しました (public URL 取得不可)")
+
         supabase.update_job(
             job_id,
             status="done",
             progress=1.0,
             message=f"処理が完了しました（{len(universities)}大学）",
-            output_path=public_url or pdf_path,
+            output_path=public_url,
         )
         logger.info(f"✅ 大会ジョブ完了: {job_id}")
         

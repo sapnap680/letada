@@ -56,7 +56,10 @@ class SupabaseHelper:
             response = self.client.storage.from_(self.bucket_name).upload(
                 storage_path,
                 file_data,
-                file_options={"content-type": self._get_content_type(local_path)}
+                file_options={
+                    "content-type": self._get_content_type(local_path),
+                    "upsert": True  # 既存ファイルがある場合は上書き
+                }
             )
             
             # 公開URLを取得
