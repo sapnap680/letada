@@ -731,12 +731,8 @@ class JBAVerificationSystem:
             teams = []
             for variation in search_variations:
                 logger.info(f"🔍 チーム検索開始: {variation}")
-                try:
-                    teams = self.search_teams_by_university(variation)
-                    logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
-                except Exception as e:
-                    logger.error(f"❌ search_teams_by_university でエラー: {e}", exc_info=True)
-                    continue
+                teams = self.search_teams_by_university(variation)
+                logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
                 
                 if teams:
                     # チームが見つかりました
@@ -752,11 +748,7 @@ class JBAVerificationSystem:
             # 各チームのメンバー情報を取得して照合
             for team in teams:
                 logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
-                try:
-                    team_data = self.get_team_members(team['url'])
-                except Exception as e:
-                    logger.error(f"❌ get_team_members でエラー (team={team.get('name')}, url={team.get('url')}): {e}", exc_info=True)
-                    continue
+                team_data = self.get_team_members(team['url'])
                 
                 if team_data and team_data["members"]:
                     logger.info(f"🔍 メンバー数: {len(team_data['members'])}人")
