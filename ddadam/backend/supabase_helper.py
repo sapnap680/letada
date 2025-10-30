@@ -58,28 +58,18 @@ class SupabaseHelper:
                 storage_path,
                 file_data,
                 file_options={
-                    "contentType": self._get_content_type(local_path),  # supabase-py expects contentType
-                    "upsert": True  # 既存ファイルがある場合は上書き
+                    "content-type": self._get_content_type(local_path)
                 }
             )
             
-            # 公開URLを取得
-            # SDKの戻り値に依存せず、環境変数のURLから公開URLを構築
-            base_url = settings.supabase_url.rstrip('/')
-            public_url = f"{base_url}/storage/v1/object/public/{self.bucket_name}/{storage_path}"
+            # 公開URLを取得（以前の実装に合わせる）
+            public_url = self.client.storage.from_(self.bucket_name).get_public_url(storage_path)
             logger.info(f"Uploaded {local_path} to {storage_path}. public_url={public_url}")
             return public_url
         
         except Exception as e:
             logger.error(f"Failed to upload {local_path}: {e}")
-            # 最低限、公開URLは構築して返す（存在しない場合は404になるが、フロントで確認可能）
-            try:
-                base_url = settings.supabase_url.rstrip('/')
-                fallback_url = f"{base_url}/storage/v1/object/public/{self.bucket_name}/{storage_path}"
-                logger.warning(f"Returning constructed URL despite upload error: {fallback_url}")
-                return fallback_url
-            except Exception:
-                return None
+            return None
     
     def get_signed_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:
         """
