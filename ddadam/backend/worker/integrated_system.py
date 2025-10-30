@@ -755,9 +755,9 @@ class IntegratedTournamentSystem:
         print(f"🔍 JBA照合開始: {player_name} ({univ})")
         start_time = time.time()
         try:
-        verification_result = self.jba_system.verify_player_info(
-            player_name, None, univ, get_details=True, threshold=1.0
-        )
+            verification_result = self.jba_system.verify_player_info(
+                player_name, None, univ, get_details=True, threshold=1.0
+            )
             print(f"✅ JBA照合完了: {player_name} -> {verification_result['status']}")
         except Exception as e:
             print(f"❌ JBA照合エラー: {player_name} - {e}")
