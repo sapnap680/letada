@@ -53,14 +53,10 @@ class SupabaseHelper:
                 file_data = f.read()
             
             # アップロード
-            # 既存ファイルがあっても上書きできるよう upsert を有効化
             response = self.client.storage.from_(self.bucket_name).upload(
                 storage_path,
                 file_data,
-                file_options={
-                    "content-type": self._get_content_type(local_path),
-                    "upsert": "true"
-                }
+                file_options={"content-type": self._get_content_type(local_path)}
             )
             
             # 公開URLを取得
