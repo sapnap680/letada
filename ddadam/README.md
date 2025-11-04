@@ -223,5 +223,3 @@ Pull Request 歓迎！
 ---
 
 **Powered by FastAPI + Next.js | v2.0.0**
-
-

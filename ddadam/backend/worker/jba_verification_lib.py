@@ -685,17 +685,6 @@ class JBAVerificationSystem:
     def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None):
         """個別選手情報の照合（男子チームのみ）"""
         try:
-            # ===== デバッグ出力（受信パラメータ） =====
-            logger.info("=" * 60)
-            logger.info("📋 受信データ:")
-            logger.info(f"  player_name: '{player_name}' (type: {type(player_name)})")
-            logger.info(f"  birth_date: '{birth_date}' (type: {type(birth_date)})")
-            logger.info(f"  university: '{university}' (type: {type(university)})")
-            logger.info(f"  player_no: '{player_no}' (type: {type(player_no)})")
-            logger.info(f"  threshold: {threshold}")
-            logger.info("=" * 60)
-            # ======================================
-
             logger.info(f"🔍 選手照合: {player_name}, 大学: {university}")
             
             # Noがない人（コーチ）の場合はJBA登録があるかだけ確認

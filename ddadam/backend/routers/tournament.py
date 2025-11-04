@@ -227,5 +227,3 @@ async def get_tournament_info(game_id: str):
         "message": "この機能は現在開発中です。/tournament エンドポイントを使用してください。"
     }
 
-
-

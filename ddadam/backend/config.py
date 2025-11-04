@@ -64,5 +64,3 @@ class Settings(BaseSettings):
 # グローバル設定インスタンス
 settings = Settings()
 
-
-
