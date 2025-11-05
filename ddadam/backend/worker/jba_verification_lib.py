@@ -126,8 +126,23 @@ class JBAVerificationSystem:
                     if base_name and len(base_name) > 2:  # 最低3文字以上
                         variations.append(base_name)
         
-        # 重複を削除
-        return list(set(variations))
+        # 「大学」を除いた部分も追加（最優先）
+        if '大学' in university_name:
+            # 「○○大学」→「○○」を抽出
+            base_without_daigaku = university_name.replace('大学', '').strip()
+            if base_without_daigaku and len(base_without_daigaku) > 1:  # 最低2文字以上
+                # 最優先で検索するため、リストの先頭に追加
+                variations.insert(0, base_without_daigaku)
+        
+        # 重複を削除（順序を保持）
+        seen = set()
+        unique_variations = []
+        for v in variations:
+            if v not in seen:
+                seen.add(v)
+                unique_variations.append(v)
+        
+        return unique_variations
     
     def login(self, email, password):
         """JBAサイトにログイン"""
