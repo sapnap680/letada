@@ -766,8 +766,19 @@ class IntegratedTournamentSystem:
         
         start_time = time.time()
         try:
+            # CSVから背番号（No）を取得
+            player_no = None
+            no_columns = ['No', 'NO', 'no', '背番号', 'No.']
+            for col in no_columns:
+                if col in row.index and pd.notna(row[col]):
+                    player_no = str(row[col]).strip()
+                    break
+            
+            # 🔍 デバッグログ: 背番号情報
+            logger.error(f"  - 背番号: {player_no if player_no else 'なし（コーチ扱い）'}")
+            
             verification_result = self.jba_system.verify_player_info(
-                player_name, None, univ, get_details=True, threshold=1.0
+                player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
             )
             
             # 🔍 デバッグログ: 結果を詳細出力
