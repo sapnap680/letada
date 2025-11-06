@@ -741,6 +741,9 @@ class IntegratedTournamentSystem:
     
     def _process_single_player_parallel(self, index, row, univ, player_name):
         """単一選手の並列処理（キャッシュ付き）"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # キャッシュキーを生成
         cache_key = f"player_{player_name}_{univ}"
         cached_result = self._get_cached_data(cache_key)
@@ -753,13 +756,34 @@ class IntegratedTournamentSystem:
         
         # 実際にJBA照合を実行
         print(f"🔍 JBA照合開始: {player_name} ({univ})")
+        
+        # 🔍 デバッグログ: 詳細情報を強制出力（logger.error で常に表示）
+        logger.error(f"🔍🔍🔍 DEBUG: verify_player_info 呼び出し開始")
+        logger.error(f"  - 選手名: {player_name}")
+        logger.error(f"  - 大学名: {univ}")
+        logger.error(f"  - JBAログイン状態: {getattr(self.jba_system, 'logged_in', 'unknown')}")
+        logger.error(f"  - セッション存在: {hasattr(self.jba_system, 'session') and self.jba_system.session is not None}")
+        
         start_time = time.time()
         try:
             verification_result = self.jba_system.verify_player_info(
                 player_name, None, univ, get_details=True, threshold=1.0
             )
+            
+            # 🔍 デバッグログ: 結果を詳細出力
+            logger.error(f"🔍🔍🔍 DEBUG: verify_player_info 結果受信")
+            logger.error(f"  - status: {verification_result.get('status')}")
+            logger.error(f"  - message: {verification_result.get('message', 'なし')}")
+            logger.error(f"  - jba_data 有無: {'あり' if verification_result.get('jba_data') else 'なし'}")
+            
             print(f"✅ JBA照合完了: {player_name} -> {verification_result['status']}")
         except Exception as e:
+            # 🔍 デバッグログ: 例外詳細を強制出力（トレースバック含む）
+            logger.error(f"🔍🔍🔍 DEBUG: 例外発生！")
+            logger.error(f"  - 例外タイプ: {type(e).__name__}")
+            logger.error(f"  - 例外メッセージ: {str(e)}")
+            logger.error(f"  - トレースバック:", exc_info=True)
+            
             print(f"❌ JBA照合エラー: {player_name} - {e}")
             verification_result = {
                 'status': 'error',
@@ -767,6 +791,9 @@ class IntegratedTournamentSystem:
                 'jba_data': None
             }
         end_time = time.time()
+        
+        # 🔍 デバッグログ: 処理時間
+        logger.error(f"🔍🔍🔍 DEBUG: 処理時間 {end_time - start_time:.2f}秒")
         
         # パフォーマンス統計を更新
         self.performance_stats['requests_count'] += 1
