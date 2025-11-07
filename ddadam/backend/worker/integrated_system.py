@@ -764,18 +764,27 @@ class IntegratedTournamentSystem:
         logger.error(f"  - JBAログイン状態: {getattr(self.jba_system, 'logged_in', 'unknown')}")
         logger.error(f"  - セッション存在: {hasattr(self.jba_system, 'session') and self.jba_system.session is not None}")
         
+        # 🔍 デバッグログ: CSVの全カラムを表示
+        logger.error(f"  - CSVカラム一覧: {list(row.index)}")
+        
         start_time = time.time()
         try:
             # CSVから背番号（No）を取得
             player_no = None
-            no_columns = ['No', 'NO', 'no', '背番号', 'No.']
+            no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+            
+            logger.error(f"  - 背番号候補カラム: {no_columns}")
+            
             for col in no_columns:
-                if col in row.index and pd.notna(row[col]):
-                    player_no = str(row[col]).strip()
-                    break
+                if col in row.index:
+                    logger.error(f"  - カラム '{col}' 存在: True, 値: {row[col]}")
+                    if pd.notna(row[col]):
+                        player_no = str(row[col]).strip()
+                        logger.error(f"  - 背番号取得成功: {player_no} (カラム: {col})")
+                        break
             
             # 🔍 デバッグログ: 背番号情報
-            logger.error(f"  - 背番号: {player_no if player_no else 'なし（コーチ扱い）'}")
+            logger.error(f"  - 最終背番号: {player_no if player_no else 'なし（コーチ扱い）'}")
             
             verification_result = self.jba_system.verify_player_info(
                 player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
