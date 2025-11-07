@@ -452,8 +452,17 @@ class JBAVerificationSystem:
     def _get_team_members_silent(self, team_url):
         """チームのメンバー情報を取得（静かな実行版 - st.*出力なし）"""
         try:
+            # 🔍 DEBUG 1: 開始
+            logger.error(f"🔍🔍🔍 DEBUG: _get_team_members_silent 開始")
+            logger.error(f"  - team_url: {team_url}")
+            
             # チーム詳細ページにアクセス
             team_page = self.session.get(team_url)
+            
+            # 🔍 DEBUG 2: HTTPレスポンス
+            logger.error(f"🔍🔍🔍 DEBUG: HTTPレスポンス")
+            logger.error(f"  - status_code: {team_page.status_code}")
+            logger.error(f"  - content_length: {len(team_page.content)} bytes")
             
             if team_page.status_code != 200:
                 return {"team_name": "Error", "members": []}
@@ -466,21 +475,57 @@ class JBAVerificationSystem:
             if title_element:
                 team_name = title_element.get_text(strip=True)
             
+            # 🔍 DEBUG 3: チーム名
+            logger.error(f"🔍🔍🔍 DEBUG: チーム名取得")
+            logger.error(f"  - team_name: {team_name}")
+            
             # メンバー情報を取得
             members = []
             
             # 選手一覧のテーブルを探す
             member_tables = soup.find_all('table', class_='table')
             
-            for table in member_tables:
+            # 🔍 DEBUG 4: テーブル数
+            logger.error(f"🔍🔍🔍 DEBUG: class='table' のテーブル数: {len(member_tables)}")
+            
+            for table_idx, table in enumerate(member_tables):
                 rows = table.find_all('tr')
                 
-                for row in rows[1:]:  # ヘッダー行をスキップ
+                # 🔍 DEBUG 5: テーブルごとの行数
+                logger.error(f"🔍🔍🔍 DEBUG: テーブル[{table_idx}] の行数: {len(rows)}")
+                
+                for row_idx, row in enumerate(rows[1:], start=1):  # ヘッダー行をスキップ
                     cells = row.find_all(['td', 'th'])
                     
+                    # 🔍 DEBUG 6: セル数（最初の2行のみ）
+                    if row_idx <= 2:
+                        logger.error(f"🔍🔍🔍 DEBUG: テーブル[{table_idx}] 行[{row_idx}] セル数: {len(cells)}")
+                    
                     if len(cells) >= 3:  # 最低限の情報がある行のみ処理
-                        # 選手名のリンクを探す
-                        name_link = row.find('a', href=re.compile(r'/player/\d+'))
+                        # 選手名のリンクを探す（JBAの実際のURLパターン: /member/to-team/数字/detail）
+                        name_link = row.find('a', href=re.compile(r'/member/to-team/\d+'))
+                        
+                        # 🔍 DEBUG 7: リンクの有無（最初の2行のみ）
+                        if row_idx <= 2:
+                            logger.error(f"🔍🔍🔍 DEBUG: テーブル[{table_idx}] 行[{row_idx}] リンク:")
+                            if name_link:
+                                logger.error(f"  - ✅ 見つかった: {name_link['href']}")
+                                logger.error(f"  - 選手名: {name_link.get_text(strip=True)}")
+                            else:
+                                logger.error(f"  - ❌ 見つからない")
+                                # 🔍 DEBUG 8: 行の中の全リンクを確認
+                                all_links = row.find_all('a')
+                                logger.error(f"  - 行内の全リンク数: {len(all_links)}")
+                                for link in all_links:
+                                    href = link.get('href', 'no-href')
+                                    text = link.get_text(strip=True)
+                                    logger.error(f"    - リンク: href='{href}', text='{text}'")
+                                
+                                # 🔍 DEBUG 9: セルの内容を確認
+                                logger.error(f"  - セルの内容:")
+                                for cell_idx, cell in enumerate(cells[:3]):  # 最初の3セルのみ
+                                    cell_text = cell.get_text(strip=True)
+                                    logger.error(f"    - セル[{cell_idx}]: '{cell_text}'")
                         
                         if name_link:
                             player_name = name_link.get_text(strip=True)
@@ -521,12 +566,22 @@ class JBAVerificationSystem:
                                 "detail_url": detail_url
                             })
             
+            # 🔍 DEBUG 10: 最終結果
+            logger.error(f"🔍🔍🔍 DEBUG: メンバー取得完了")
+            logger.error(f"  - 取得したメンバー数: {len(members)}")
+            if len(members) > 0:
+                logger.error(f"  - 最初のメンバー: {members[0].get('name', 'N/A')}")
+            else:
+                logger.error(f"  - ⚠️ メンバーが1人も見つかりませんでした")
+            
             return {
                 "team_name": team_name,
                 "members": members
             }
             
         except Exception as e:
+            logger.error(f"🔍🔍🔍 DEBUG: 例外発生！")
+            logger.error(f"  - 例外: {str(e)}", exc_info=True)
             return {"team_name": "Error", "members": []}
     
     def get_player_details(self, detail_url):
