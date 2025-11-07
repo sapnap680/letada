@@ -710,18 +710,32 @@ class JBAVerificationSystem:
 
     def calculate_similarity(self, name1, name2):
         """名前の類似度を計算"""
+        # 🔍 DEBUG: 入力値の確認（logger.error で確実に表示）
+        logger.error(f"🔍🔍🔍 DEBUG: calculate_similarity 呼び出し")
+        logger.error(f"  - name1: '{name1}' (type: {type(name1)})")
+        logger.error(f"  - name2: '{name2}' (type: {type(name2)})")
+        
         if not name1 or not name2:
+            logger.error(f"  - ⚠️ 空の名前: name1={bool(name1)}, name2={bool(name2)}")
             return 0.0
         
         # 正規化
         norm_name1 = self.normalize_name(name1)
         norm_name2 = self.normalize_name(name2)
         
+        # 🔍 DEBUG: 正規化後の値
+        logger.error(f"  - 正規化後 name1: '{norm_name1}'")
+        logger.error(f"  - 正規化後 name2: '{norm_name2}'")
+        
         if norm_name1 == norm_name2:
+            logger.error(f"  - ✅ 完全一致: 1.0")
             return 1.0
         
         # 基本的な類似度
         basic_similarity = SequenceMatcher(None, norm_name1, norm_name2).ratio()
+        
+        # 🔍 DEBUG: 類似度結果
+        logger.error(f"  - 類似度: {basic_similarity:.3f}")
         
         return basic_similarity
     
