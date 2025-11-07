@@ -109,40 +109,24 @@ class JBAVerificationSystem:
         return normalized
     
     def get_search_variations(self, university_name):
-        """大学名の検索バリエーションを生成"""
+        """大学名から「大学校」または「大学」を外した名前だけを返す"""
         if not university_name:
             return []
         
-        variations = [university_name.strip()]
+        # 「大学校」を除いた部分を返す（「防衛大学校」→「防衛」）
+        if '大学校' in university_name:
+            base_without_daigakko = university_name.replace('大学校', '').strip()
+            if base_without_daigakko and len(base_without_daigakko) > 1:  # 最低2文字以上
+                return [base_without_daigakko]
         
-        # 長い大学名の場合、短縮バリエーションも追加
-        if len(university_name) > 6:  # 長い名前の場合
-            # 語尾を段階的に削除
-            suffixes_to_remove = ['体育会バスケットボール部', 'バスケットボール部', '体育会', '部']
-            
-            for suffix in suffixes_to_remove:
-                if university_name.endswith(suffix):
-                    base_name = university_name[:-len(suffix)].strip()
-                    if base_name and len(base_name) > 2:  # 最低3文字以上
-                        variations.append(base_name)
-        
-        # 「大学」を除いた部分も追加（最優先）
+        # 「大学」を除いた部分を返す（「早稲田大学」→「早稲田」）
         if '大学' in university_name:
-            # 「○○大学」→「○○」を抽出
             base_without_daigaku = university_name.replace('大学', '').strip()
             if base_without_daigaku and len(base_without_daigaku) > 1:  # 最低2文字以上
-                # 最優先で検索するため、リストの先頭に追加
-                variations.insert(0, base_without_daigaku)
+                return [base_without_daigaku]
         
-        # 重複を削除（順序を保持）
-        seen = set()
-        unique_variations = []
-        for v in variations:
-            if v not in seen:
-                seen.add(v)
-                unique_variations.append(v)
-        
-        return unique_variations
+        # 「大学校」「大学」がない場合はそのまま返す
+        return [university_name.strip()]
     
     def login(self, email, password):
         """JBAサイトにログイン"""
@@ -714,61 +698,25 @@ class JBAVerificationSystem:
                 logger.error("❌ JBAにログインしていません")
                 return {"status": "error", "message": "JBAログインが必要です"}
             
-            # Noがない人（コーチ）の場合はJBA登録があるかだけ確認
-            if not player_no or player_no == "" or player_no == "コーチ":
-                logger.info(f"🔍 コーチ照合: {player_name}")
-                # コーチの場合は名前のみで照合
-                search_variations = self.get_search_variations(university)
-                for variation in search_variations:
-                    try:
-                        teams = self._search_teams_by_university_silent(variation)
-                        if teams:
-                            for team in teams:
-                                try:
-                                    team_data = self._get_team_members_silent(team['url'])
-                                    if team_data and team_data.get("members"):
-                                        for member in team_data["members"]:
-                                            try:
-                                                name_similarity = self.calculate_similarity(player_name, member.get("name", ""))
-                                                if name_similarity >= 0.6:
-                                                    if get_details and member.get("detail_url"):
-                                                        player_details = self.get_player_details(member["detail_url"])
-                                                        member.update(player_details)
-                                                    return {
-                                                        "status": "match" if name_similarity >= 0.6 else "not_found",
-                                                        "jba_data": member,
-                                                        "similarity": name_similarity
-                                                    }
-                                            except Exception as member_error:
-                                                logger.error(f"❌ コーチメンバー処理エラー: {member_error}")
-                                                continue
-                                except Exception as team_error:
-                                    logger.error(f"❌ コーチチーム処理エラー: {team_error}")
-                                    continue
-                    except Exception as search_error:
-                        logger.error(f"❌ コーチチーム検索エラー ({variation}): {search_error}")
-                        continue
-                return {"status": "not_found", "message": f"{player_name}のJBA登録が見つかりませんでした"}
+            # 背番号がない場合も選手名・カナ名で照合（コーチ扱いをやめる）
+            # 背番号の有無に関わらず、選手名・カナ名で照合する
             
-            # 大学名の検索バリエーションを生成
+            # 大学名から「大学」を外した名前で検索
             search_variations = self.get_search_variations(university)
-            logger.info(f"🔍 検索バリエーション: {search_variations}")
+            if not search_variations:
+                logger.warning(f"⚠️ {university}の検索名が生成できませんでした")
+                return {"status": "not_found", "message": f"{university}の検索名が生成できませんでした"}
             
-            all_matched_members = []  # すべてのマッチ候補を保存
+            # 最初のバリエーション（大学名から「大学」を外した名前）のみで検索
+            search_name = search_variations[0]
+            logger.info(f"🔍 チーム検索開始: {search_name}")
             
-            teams = []
-            for variation in search_variations:
-                try:
-                    logger.info(f"🔍 チーム検索開始: {variation}")
-                    teams = self._search_teams_by_university_silent(variation)
-                    logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
-                    
-                    if teams:
-                        # チームが見つかりました
-                        break
-                except Exception as search_error:
-                    logger.error(f"❌ チーム検索エラー ({variation}): {search_error}")
-                    continue
+            try:
+                teams = self._search_teams_by_university_silent(search_name)
+                logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
+            except Exception as search_error:
+                logger.error(f"❌ チーム検索エラー ({search_name}): {search_error}")
+                teams = []
             
             if not teams:
                 logger.warning(f"⚠️ {university}の男子チームが見つかりませんでした")
@@ -802,10 +750,8 @@ class JBAVerificationSystem:
                                 diff_info = self.show_name_differences(player_name, member.get("name", ""))
                                 logger.debug(f"  - {diff_info}")
 
-                            # 第1段階: 0.6の閾値で候補を探す
+                            # 名前類似度が0.6以上ならJBA登録あり（〇）として扱う
                             if name_similarity >= 0.6:
-                                # 候補発見
-                                
                                 # 詳細情報を取得する場合
                                 if get_details and member.get("detail_url"):
                                     try:
@@ -813,58 +759,13 @@ class JBAVerificationSystem:
                                         member.update(player_details)
                                     except Exception as detail_error:
                                         logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
-                            
-                            # 新しい完全一致判定ロジック
-                            # 選手名、カナ名、学年、身長、体重が一致すれば完全一致
-                            csv_data = {
-                                '選手名': player_name,
-                                'カナ名': '',  # CSVから取得
-                                '学年': '',    # CSVから取得
-                                '身長': '',    # CSVから取得
-                                '体重': ''     # CSVから取得
-                            }
-                            
-                            # JBAデータとの照合
-                            jba_name_match = name_similarity >= 1.0
-                            jba_kana_match = True  # カナ名は常に一致とする
-                            jba_grade_match = True  # 学年は常に一致とする
-                            jba_height_match = True  # 身長は常に一致とする
-                            
-                            # 体重の照合（JBAにない場合は定義内にあれば完全一致）
-                            jba_weight_match = True
-                            if 'weight' in member and member['weight']:
-                                # JBAに体重がある場合は照合
-                                jba_weight_match = True  # 簡易的に一致とする
-                            else:
-                                # JBAに体重がない場合は定義内にあれば完全一致
-                                jba_weight_match = True
-                            
-                            # すべての条件が満たされれば完全一致
-                            if jba_name_match and jba_kana_match and jba_grade_match and jba_height_match and jba_weight_match:
-                                # 完全一致
+                                
+                                # JBA登録あり（〇）として返す
                                 return {
                                     "status": "match",
                                     "jba_data": member,
                                     "similarity": name_similarity
                                 }
-                            
-                            # 0.6以上1.0未満の候補も保存（最終的に返す可能性）
-                            elif name_similarity >= 0.6 and name_similarity < 1.0:
-                                # 候補保存
-                                
-                                if get_details and member.get("detail_url"):
-                                    try:
-                                        player_details = self.get_player_details(member["detail_url"])
-                                        member.update(player_details)
-                                    except Exception as detail_error:
-                                        logger.error(f"❌ 部分一致選手詳細取得エラー: {detail_error}")
-                                
-                                all_matched_members.append({
-                                    "status": "partial_match",
-                                    "jba_data": member,
-                                    "similarity": name_similarity,
-                                    "message": f"部分一致: {member.get('name', 'N/A')} (類似度: {name_similarity:.3f})"
-                                })
                         
                         except Exception as member_error:
                             logger.error(f"❌ メンバー処理エラー: {member_error}")
@@ -874,24 +775,7 @@ class JBAVerificationSystem:
                     logger.error(f"❌ チーム処理エラー ({team.get('name', 'Unknown')}): {team_error}")
                     continue
 
-            # 完全一致を優先し、なければ部分一致を返す
-            if all_matched_members:
-                # 完全一致（類似度1.0）を優先
-                exact_matches = [m for m in all_matched_members if m["similarity"] >= 1.0]
-                if exact_matches:
-                    # 完全一致候補
-                    return exact_matches[0]  # 最初の完全一致を返す
-                
-                # 部分一致（類似度0.6以上1.0未満）を返す
-                partial_matches = [m for m in all_matched_members if m["similarity"] >= 0.6 and m["similarity"] < 1.0]
-                if partial_matches:
-                    # 部分一致候補
-                    return partial_matches[0]  # 最初の部分一致を返す
-                
-                # その他の候補
-                # その他候補
-                return all_matched_members[0]
-
+            # JBA登録が見つからなかった場合（×）
             logger.warning(f"⚠️ {player_name} のJBA登録が見つかりませんでした")
             return {"status": "not_found", "message": "JBAデータベースに該当する選手が見つかりませんでした"}
 

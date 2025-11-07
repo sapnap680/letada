@@ -510,9 +510,19 @@ class IntegratedTournamentSystem:
                     })
                     continue
                 
+                # CSVから背番号（No）を取得（数字のみ有効）
+                player_no = None
+                no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+                for col in no_columns:
+                    if col in row.index and pd.notna(row[col]):
+                        value = str(row[col]).strip()
+                        if value.isdigit() or value.replace('.', '').isdigit():
+                            player_no = value
+                            break
+                
                 # JBA照合
                 verification_result = self.jba_system.verify_player_info(
-                    player_name, None, univ, get_details=True, threshold=1.0
+                    player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
                 )
                 
                 result = {
@@ -520,10 +530,11 @@ class IntegratedTournamentSystem:
                     'original_data': row.to_dict(),
                     'verification_result': verification_result,
                     'status': verification_result['status'],
-                    'university': univ
+                    'university': univ,
+                    'player_no': player_no  # 背番号を結果に含める
                 }
                 
-                # 完全一致の場合
+                # JBA登録あり（〇）の場合
                 if verification_result['status'] == 'match':
                     if 'jba_data' in verification_result:
                         jba_data = verification_result['jba_data']
@@ -531,58 +542,62 @@ class IntegratedTournamentSystem:
                         
                         corrected_data = row.to_dict().copy()
                         
-                        # JBA情報を追加
-                        if 'height' in jba_data and jba_data['height']:
-                            corrected_data['身長'] = f"{jba_data['height']}cm"
-                        if 'weight' in jba_data and jba_data['weight']:
-                            corrected_data['体重'] = f"{jba_data['weight']}kg"
-                        if 'position' in jba_data and jba_data['position']:
-                            corrected_data['ポジション'] = jba_data['position']
-                        if 'school' in jba_data and jba_data['school']:
-                            if 'school' in school_corrections:
-                                corrected_data['出身校'] = school_corrections['school']
-                            else:
-                                corrected_data['出身校'] = jba_data['school']
+                        # 背番号がある場合のみ身長・体重・学年を照合
+                        if player_no:
+                            # 身長の照合（5cm以上差があったらJBAの値に変更）
+                            if 'height' in jba_data and jba_data['height']:
+                                try:
+                                    jba_height = float(str(jba_data['height']).replace('cm', '').strip())
+                                    csv_height_str = str(corrected_data.get('身長', '')).replace('cm', '').strip()
+                                    if csv_height_str and csv_height_str.replace('.', '').isdigit():
+                                        csv_height = float(csv_height_str)
+                                        height_diff = abs(csv_height - jba_height)
+                                        if height_diff >= 5.0:
+                                            corrected_data['身長'] = f"{jba_height}cm"
+                                    else:
+                                        # CSVに身長がない場合はJBAの値を使用
+                                        corrected_data['身長'] = f"{jba_height}cm"
+                                except (ValueError, AttributeError):
+                                    # パースエラーの場合はJBAの値を使用
+                                    corrected_data['身長'] = f"{jba_data['height']}cm"
+                            
+                            # 体重の照合（5kg以上差があったらJBAの値に変更）
+                            if 'weight' in jba_data and jba_data['weight']:
+                                try:
+                                    jba_weight = float(str(jba_data['weight']).replace('kg', '').strip())
+                                    csv_weight_str = str(corrected_data.get('体重', '')).replace('kg', '').strip()
+                                    if csv_weight_str and csv_weight_str.replace('.', '').isdigit():
+                                        csv_weight = float(csv_weight_str)
+                                        weight_diff = abs(csv_weight - jba_weight)
+                                        if weight_diff >= 5.0:
+                                            corrected_data['体重'] = f"{jba_weight}kg"
+                                    else:
+                                        # CSVに体重がない場合はJBAの値を使用
+                                        corrected_data['体重'] = f"{jba_weight}kg"
+                                except (ValueError, AttributeError):
+                                    # パースエラーの場合はJBAの値を使用
+                                    corrected_data['体重'] = f"{jba_data['weight']}kg"
+                        
+                        # 学年の照合（背番号の有無に関わらず、JBAが正しいので異なる場合はJBAに合わせる）
                         if 'grade' in jba_data and jba_data['grade']:
-                            corrected_data['学年'] = jba_data['grade']
-                        if 'uniform_number' in jba_data and jba_data['uniform_number']:
-                            corrected_data['背番号'] = jba_data['uniform_number']
+                            original_grade = corrected_data.get('学年', '')
+                            if str(jba_data['grade']) != str(original_grade):
+                                corrected_data['学年'] = jba_data['grade']
+                        
+                        # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
                         
                         result['correction'] = corrected_data
-                        
-                        if not is_valid:
-                            result['validation_issues'] = validation_issues
-                            result['message'] = f'JBAデータベースと完全一致（詳細情報追加）⚠️ 異常値検出: {", ".join(validation_issues)}'
-                        else:
-                            result['message'] = 'JBAデータベースと完全一致（詳細情報追加）'
+                        result['message'] = 'JBA登録あり（〇）'
                     else:
                         result['correction'] = None
-                        result['message'] = 'JBAデータベースと完全一致'
+                        result['message'] = 'JBA登録あり（〇）'
                 
-                # 部分一致の場合
-                elif verification_result['status'] == 'partial_match':
-                    jba_data = verification_result['jba_data']
-                    similarity = verification_result.get('similarity', 0.0)
-                    
-                    corrected_data = row.to_dict().copy()
-                    
-                    if 'height' in jba_data and jba_data['height']:
-                        corrected_data['身長'] = f"{jba_data['height']}cm"
-                    if 'weight' in jba_data and jba_data['weight']:
-                        corrected_data['体重'] = f"{jba_data['weight']}kg"
-                    if 'position' in jba_data and jba_data['position']:
-                        corrected_data['ポジション'] = jba_data['position']
-                    if 'school' in jba_data and jba_data['school']:
-                        corrected_data['出身校'] = jba_data['school']
-                    if 'grade' in jba_data and jba_data['grade']:
-                        corrected_data['学年'] = jba_data['grade']
-                    if 'uniform_number' in jba_data and jba_data['uniform_number']:
-                        corrected_data['背番号'] = jba_data['uniform_number']
-                    
-                    result['correction'] = corrected_data
-                    result['message'] = f"部分一致: {jba_data['name']} (類似度: {similarity:.3f}) - 手動確認推奨"
+                # JBA登録なし（×）の場合
+                elif verification_result['status'] == 'not_found':
+                    result['correction'] = None
+                    result['message'] = 'JBA登録なし（×）'
                 
-                # 一致なしの場合
+                # その他の場合（エラーなど）
                 else:
                     result['correction'] = None
                     result['message'] = verification_result.get('message', '照合できませんでした')
@@ -724,15 +739,13 @@ class IntegratedTournamentSystem:
         # JBA照合統計を表示
         total_players = len(all_results)
         match_count = len([r for r in all_results if r.get('status') == 'match'])
-        partial_match_count = len([r for r in all_results if r.get('status') == 'partial_match'])
         not_found_count = len([r for r in all_results if r.get('status') == 'not_found'])
         error_count = len([r for r in all_results if r.get('status') == 'error'])
         
         print(f"📊 JBA照合統計:")
         print(f"   総選手数: {total_players}")
-        print(f"   完全一致: {match_count}")
-        print(f"   部分一致: {partial_match_count}")
-        print(f"   未発見: {not_found_count}")
+        print(f"   JBA登録あり（〇）: {match_count}")
+        print(f"   JBA登録なし（×）: {not_found_count}")
         print(f"   エラー: {error_count}")
         
         # 並列処理完了
@@ -757,46 +770,42 @@ class IntegratedTournamentSystem:
         # 実際にJBA照合を実行
         print(f"🔍 JBA照合開始: {player_name} ({univ})")
         
-        # 🔍 デバッグログ: 詳細情報を強制出力（logger.error で常に表示）
-        logger.error(f"🔍🔍🔍 DEBUG: verify_player_info 呼び出し開始")
-        logger.error(f"  - 選手名: {player_name}")
-        logger.error(f"  - 大学名: {univ}")
-        logger.error(f"  - JBAログイン状態: {getattr(self.jba_system, 'logged_in', 'unknown')}")
-        logger.error(f"  - セッション存在: {hasattr(self.jba_system, 'session') and self.jba_system.session is not None}")
-        
-        # 🔍 デバッグログ: CSVの全カラムを表示
-        logger.error(f"  - CSVカラム一覧: {list(row.index)}")
+        # デバッグログ（必要時のみ）
+        logger.debug(f"🔍 JBA照合開始: {player_name} ({univ})")
         
         start_time = time.time()
         try:
-            # CSVから背番号（No）を取得
+            # CSVから背番号（No）を取得（数字のみ有効）
             player_no = None
             no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
             
-            logger.error(f"  - 背番号候補カラム: {no_columns}")
-            
             for col in no_columns:
-                if col in row.index:
-                    logger.error(f"  - カラム '{col}' 存在: True, 値: {row[col]}")
-                    if pd.notna(row[col]):
-                        player_no = str(row[col]).strip()
-                        logger.error(f"  - 背番号取得成功: {player_no} (カラム: {col})")
+                if col in row.index and pd.notna(row[col]):
+                    value = str(row[col]).strip()
+                    # 数字のみ有効（「トレーナー」「学生コーチ」などは無視）
+                    if value.isdigit():
+                        player_no = value
+                        break
+                    # 数字を含む文字列（例: "10"）も有効
+                    elif value.replace('.', '').isdigit():
+                        player_no = value
                         break
             
             # 🔍 デバッグログ: 背番号情報
-            logger.error(f"  - 最終背番号: {player_no if player_no else 'なし（コーチ扱い）'}")
+            if player_no:
+                logger.debug(f"  - 背番号: {player_no}")
+            else:
+                logger.debug(f"  - 背番号: なし（コーチ扱い）")
             
             verification_result = self.jba_system.verify_player_info(
                 player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
             )
             
-            # 🔍 デバッグログ: 結果を詳細出力
-            logger.error(f"🔍🔍🔍 DEBUG: verify_player_info 結果受信")
-            logger.error(f"  - status: {verification_result.get('status')}")
-            logger.error(f"  - message: {verification_result.get('message', 'なし')}")
-            logger.error(f"  - jba_data 有無: {'あり' if verification_result.get('jba_data') else 'なし'}")
+            # 結果をログに記録
+            status = verification_result.get('status')
+            logger.debug(f"✅ JBA照合完了: {player_name} -> {status}")
             
-            print(f"✅ JBA照合完了: {player_name} -> {verification_result['status']}")
+            print(f"✅ JBA照合完了: {player_name} -> {status}")
         except Exception as e:
             # 🔍 デバッグログ: 例外詳細を強制出力（トレースバック含む）
             logger.error(f"🔍🔍🔍 DEBUG: 例外発生！")
@@ -812,8 +821,8 @@ class IntegratedTournamentSystem:
             }
         end_time = time.time()
         
-        # 🔍 デバッグログ: 処理時間
-        logger.error(f"🔍🔍🔍 DEBUG: 処理時間 {end_time - start_time:.2f}秒")
+        # 処理時間をログに記録（DEBUG レベル）
+        logger.debug(f"⏱️ 処理時間: {end_time - start_time:.2f}秒")
         
         # パフォーマンス統計を更新
         self.performance_stats['requests_count'] += 1
@@ -823,12 +832,26 @@ class IntegratedTournamentSystem:
             / self.performance_stats['requests_count']
         )
         
+        # player_no を取得（エラー時は None）
+        player_no = None
+        try:
+            no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+            for col in no_columns:
+                if col in row.index and pd.notna(row[col]):
+                    value = str(row[col]).strip()
+                    if value.isdigit() or value.replace('.', '').isdigit():
+                        player_no = value
+                        break
+        except:
+            pass
+        
         result = {
             'index': index,
             'original_data': row.to_dict(),
             'verification_result': verification_result,
             'status': verification_result['status'],
-            'university': univ
+            'university': univ,
+            'player_no': player_no  # 背番号を結果に含める
         }
         
         # JBA照合結果の詳細処理
@@ -837,47 +860,60 @@ class IntegratedTournamentSystem:
                 jba_data = verification_result['jba_data']
                 corrected_data = row.to_dict().copy()
                 
-                # JBA情報を追加
-                if 'height' in jba_data and jba_data['height']:
-                    corrected_data['身長'] = f"{jba_data['height']}cm"
-                if 'weight' in jba_data and jba_data['weight']:
-                    corrected_data['体重'] = f"{jba_data['weight']}kg"
-                if 'position' in jba_data and jba_data['position']:
-                    corrected_data['ポジション'] = jba_data['position']
-                if 'school' in jba_data and jba_data['school']:
-                    corrected_data['出身校'] = jba_data['school']
+                # 背番号がある場合のみ身長・体重・学年を照合
+                if player_no:
+                    # 身長の照合（5cm以上差があったらJBAの値に変更）
+                    if 'height' in jba_data and jba_data['height']:
+                        try:
+                            jba_height = float(str(jba_data['height']).replace('cm', '').strip())
+                            csv_height_str = str(corrected_data.get('身長', '')).replace('cm', '').strip()
+                            if csv_height_str and csv_height_str.replace('.', '').isdigit():
+                                csv_height = float(csv_height_str)
+                                height_diff = abs(csv_height - jba_height)
+                                if height_diff >= 5.0:
+                                    corrected_data['身長'] = f"{jba_height}cm"
+                            else:
+                                # CSVに身長がない場合はJBAの値を使用
+                                corrected_data['身長'] = f"{jba_height}cm"
+                        except (ValueError, AttributeError):
+                            # パースエラーの場合はJBAの値を使用
+                            corrected_data['身長'] = f"{jba_data['height']}cm"
+                    
+                    # 体重の照合（5kg以上差があったらJBAの値に変更）
+                    if 'weight' in jba_data and jba_data['weight']:
+                        try:
+                            jba_weight = float(str(jba_data['weight']).replace('kg', '').strip())
+                            csv_weight_str = str(corrected_data.get('体重', '')).replace('kg', '').strip()
+                            if csv_weight_str and csv_weight_str.replace('.', '').isdigit():
+                                csv_weight = float(csv_weight_str)
+                                weight_diff = abs(csv_weight - jba_weight)
+                                if weight_diff >= 5.0:
+                                    corrected_data['体重'] = f"{jba_weight}kg"
+                            else:
+                                # CSVに体重がない場合はJBAの値を使用
+                                corrected_data['体重'] = f"{jba_weight}kg"
+                        except (ValueError, AttributeError):
+                            # パースエラーの場合はJBAの値を使用
+                            corrected_data['体重'] = f"{jba_data['weight']}kg"
+                    
+                
+                # 学年の照合（背番号の有無に関わらず、JBAが正しいので異なる場合はJBAに合わせる）
                 if 'grade' in jba_data and jba_data['grade']:
-                    corrected_data['学年'] = jba_data['grade']
-                if 'uniform_number' in jba_data and jba_data['uniform_number']:
-                    corrected_data['背番号'] = jba_data['uniform_number']
+                    original_grade = corrected_data.get('学年', '')
+                    if str(jba_data['grade']) != str(original_grade):
+                        corrected_data['学年'] = jba_data['grade']
+                
+                # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
                 
                 result['correction'] = corrected_data
-                result['message'] = 'JBAデータベースと完全一致（詳細情報追加）'
+                result['message'] = 'JBA登録あり（〇）'
             else:
                 result['correction'] = None
-                result['message'] = 'JBAデータベースと完全一致'
+                result['message'] = 'JBA登録あり（〇）'
         
-        elif verification_result['status'] == 'partial_match':
-            jba_data = verification_result['jba_data']
-            similarity = verification_result.get('similarity', 0.0)
-            
-            corrected_data = row.to_dict().copy()
-            
-            if 'height' in jba_data and jba_data['height']:
-                corrected_data['身長'] = f"{jba_data['height']}cm"
-            if 'weight' in jba_data and jba_data['weight']:
-                corrected_data['体重'] = f"{jba_data['weight']}kg"
-            if 'position' in jba_data and jba_data['position']:
-                corrected_data['ポジション'] = jba_data['position']
-            if 'school' in jba_data and jba_data['school']:
-                corrected_data['出身校'] = jba_data['school']
-            if 'grade' in jba_data and jba_data['grade']:
-                corrected_data['学年'] = jba_data['grade']
-            if 'uniform_number' in jba_data and jba_data['uniform_number']:
-                corrected_data['背番号'] = jba_data['uniform_number']
-            
-            result['correction'] = corrected_data
-            result['message'] = f"部分一致: {jba_data['name']} (類似度: {similarity:.3f}) - 手動確認推奨"
+        elif verification_result['status'] == 'not_found':
+            result['correction'] = None
+            result['message'] = 'JBA登録なし（×）'
         
         else:
             result['correction'] = None
@@ -909,7 +945,6 @@ class IntegratedTournamentSystem:
             # 統計情報を計算
             total_players = len(univ_results)
             match_count = len([r for r in univ_results if r['status'] == 'match'])
-            partial_match_count = len([r for r in univ_results if r['status'] == 'partial_match'])
             not_found_count = len([r for r in univ_results if r['status'] == 'not_found'])
             
             # レポートデータを作成
@@ -917,7 +952,6 @@ class IntegratedTournamentSystem:
                 'university': univ,
                 'total_players': total_players,
                 'match_count': match_count,
-                'partial_match_count': partial_match_count,
                 'not_found_count': not_found_count,
                 'match_rate': (match_count / total_players * 100) if total_players > 0 else 0,
                 'results': univ_results
@@ -956,15 +990,11 @@ class IntegratedTournamentSystem:
                     <p>{report['total_players']}</p>
                 </div>
                 <div class="stat-box">
-                    <h3>完全一致</h3>
+                    <h3>JBA登録あり（〇）</h3>
                     <p>{report['match_count']}</p>
                 </div>
                 <div class="stat-box">
-                    <h3>部分一致</h3>
-                    <p>{report['partial_match_count']}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>未発見</h3>
+                    <h3>JBA登録なし（×）</h3>
                     <p>{report['not_found_count']}</p>
                 </div>
                 <div class="stat-box">
@@ -1042,7 +1072,6 @@ class IntegratedTournamentSystem:
         # 全大学の統計情報
         total_players = sum(report['total_players'] for report in reports.values())
         total_matches = sum(report['match_count'] for report in reports.values())
-        total_partial = sum(report['partial_match_count'] for report in reports.values())
         total_not_found = sum(report['not_found_count'] for report in reports.values())
         overall_match_rate = (total_matches / total_players * 100) if total_players > 0 else 0
         
@@ -1053,15 +1082,11 @@ class IntegratedTournamentSystem:
                     <p>{total_players}</p>
                 </div>
                 <div class="stat-box">
-                    <h3>完全一致</h3>
+                    <h3>JBA登録あり（〇）</h3>
                     <p>{total_matches}</p>
                 </div>
                 <div class="stat-box">
-                    <h3>部分一致</h3>
-                    <p>{total_partial}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>未発見</h3>
+                    <h3>JBA登録なし（×）</h3>
                     <p>{total_not_found}</p>
                 </div>
                 <div class="stat-box">
@@ -1083,15 +1108,11 @@ class IntegratedTournamentSystem:
                             <p>{report['total_players']}</p>
                         </div>
                         <div class="stat-box">
-                            <h4>完全一致</h4>
+                            <h4>JBA登録あり（〇）</h4>
                             <p>{report['match_count']}</p>
                         </div>
                         <div class="stat-box">
-                            <h4>部分一致</h4>
-                            <p>{report['partial_match_count']}</p>
-                        </div>
-                        <div class="stat-box">
-                            <h4>未発見</h4>
+                            <h4>JBA登録なし（×）</h4>
                             <p>{report['not_found_count']}</p>
                         </div>
                         <div class="stat-box">
@@ -1234,11 +1255,9 @@ class IntegratedTournamentSystem:
                     d = r["original_data"]
                     status = r.get("status", "unknown")
                     
-                    # ステータス記号
+                    # ステータス記号（〇 or ×）
                     if status == "match":
-                        status_symbol = "✓"
-                    elif status == "partial_match":
-                        status_symbol = "△"
+                        status_symbol = "〇"
                     elif status == "not_found":
                         status_symbol = "×"
                     else:
@@ -1517,9 +1536,8 @@ class IntegratedTournamentSystem:
         # 統計情報
         elements.append(Paragraph("📊 統計情報", styles["Heading2"]))
         elements.append(Paragraph(f"総選手数: {report['total_players']}", styles["Normal"]))
-        elements.append(Paragraph(f"完全一致: {report['match_count']}", styles["Normal"]))
-        elements.append(Paragraph(f"部分一致: {report['partial_match_count']}", styles["Normal"]))
-        elements.append(Paragraph(f"未発見: {report['not_found_count']}", styles["Normal"]))
+        elements.append(Paragraph(f"JBA登録あり（〇）: {report['match_count']}", styles["Normal"]))
+        elements.append(Paragraph(f"JBA登録なし（×）: {report['not_found_count']}", styles["Normal"]))
         elements.append(Paragraph(f"一致率: {report['match_rate']:.1f}%", styles["Normal"]))
         elements.append(Spacer(1, 20))
         
@@ -1532,14 +1550,12 @@ class IntegratedTournamentSystem:
             d = r["original_data"]
             status = r.get("status", "unknown")
             
-            # ステータスに応じて色分け
+            # ステータスに応じて色分け（〇 or ×）
             status_text = ""
             if status == "match":
-                status_text = "✅ 完全一致"
-            elif status == "partial_match":
-                status_text = "⚠️ 部分一致"
+                status_text = "〇"
             elif status == "not_found":
-                status_text = "❌ 未発見"
+                status_text = "×"
             else:
                 status_text = f"❓ {status}"
             
@@ -1594,7 +1610,6 @@ class IntegratedTournamentSystem:
                 'university': univ,
                 'total_players': len(univ_data),
                 'match_count': 0,  # 簡易版
-                'partial_match_count': 0,
                 'not_found_count': 0,
                 'match_rate': 0.0,
                 'results': []  # 簡易版
