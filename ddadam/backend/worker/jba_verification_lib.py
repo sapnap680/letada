@@ -72,6 +72,10 @@ class JBAVerificationSystem:
             'X-Requested-With': 'XMLHttpRequest'
         })
         self.logged_in = False
+        
+        # 🚀 パフォーマンス改善: チーム情報のキャッシュ
+        self.teams_cache = {}  # {search_name: [teams]}
+        self.team_members_cache = {}  # {team_url: team_data}
     
     def get_current_fiscal_year(self):
         """現在の年度を取得"""
@@ -709,14 +713,21 @@ class JBAVerificationSystem:
             
             # 最初のバリエーション（大学名から「大学」を外した名前）のみで検索
             search_name = search_variations[0]
-            logger.info(f"🔍 チーム検索開始: {search_name}")
             
-            try:
-                teams = self._search_teams_by_university_silent(search_name)
-                logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
-            except Exception as search_error:
-                logger.error(f"❌ チーム検索エラー ({search_name}): {search_error}")
-                teams = []
+            # 🚀 パフォーマンス改善: チーム情報をキャッシュから取得
+            if search_name in self.teams_cache:
+                teams = self.teams_cache[search_name]
+                logger.debug(f"💾 キャッシュからチーム情報を取得: {len(teams)}チーム")
+            else:
+                logger.info(f"🔍 チーム検索開始: {search_name}")
+                try:
+                    teams = self._search_teams_by_university_silent(search_name)
+                    # キャッシュに保存
+                    self.teams_cache[search_name] = teams
+                    logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
+                except Exception as search_error:
+                    logger.error(f"❌ チーム検索エラー ({search_name}): {search_error}")
+                    teams = []
             
             if not teams:
                 logger.warning(f"⚠️ {university}の男子チームが見つかりませんでした")
@@ -725,30 +736,31 @@ class JBAVerificationSystem:
             # 各チームのメンバー情報を取得して照合
             for team in teams:
                 try:
-                    logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
-                    team_data = self._get_team_members_silent(team['url'])
+                    # 🚀 パフォーマンス改善: メンバー情報をキャッシュから取得
+                    if team['url'] in self.team_members_cache:
+                        team_data = self.team_members_cache[team['url']]
+                        logger.debug(f"💾 キャッシュからメンバー情報を取得: {team['name']}")
+                    else:
+                        logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
+                        team_data = self._get_team_members_silent(team['url'])
+                        # キャッシュに保存
+                        self.team_members_cache[team['url']] = team_data
                     
                     if not team_data or not team_data.get("members"):
                         logger.warning(f"⚠️ チーム {team['name']} のメンバーが取得できませんでした")
                         continue
                     
-                    logger.info(f"🔍 メンバー数: {len(team_data['members'])}人")
+                    # 🚀 パフォーマンス改善: ログ出力を削減
+                    logger.debug(f"🔍 メンバー数: {len(team_data['members'])}人")
                     
                     for i, member in enumerate(team_data["members"]):
                         try:
-                            logger.debug(f"  - メンバー{i+1}: {member.get('name', 'N/A')}")
-                            
                             # 名前の類似度チェック
                             name_similarity = self.calculate_similarity(player_name, member.get("name", ""))
 
-                            # デバッグ情報を表示
-                            logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}")
-                            logger.debug(f"  - 名前類似度: {name_similarity:.3f}")
-                            
-                            # 微妙な違いを表示（0.6以上の候補のみ）
+                            # 🚀 パフォーマンス改善: デバッグ情報を削減（マッチした場合のみ）
                             if name_similarity >= 0.6:
-                                diff_info = self.show_name_differences(player_name, member.get("name", ""))
-                                logger.debug(f"  - {diff_info}")
+                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 類似度: {name_similarity:.3f}")
 
                             # 名前類似度が0.6以上ならJBA登録あり（〇）として扱う
                             if name_similarity >= 0.6:

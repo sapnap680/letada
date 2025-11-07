@@ -685,8 +685,9 @@ class IntegratedTournamentSystem:
                     if player_name:
                         player_data.append((index, row, univ, player_name))
         
-        # 並列処理でJBA照合（スレッド数を動的調整）
-        optimal_workers = min(self.max_workers, len(player_data), 20)
+        # 🚀 パフォーマンス改善: 並列処理でJBA照合（スレッド数を最適化）
+        # キャッシュがある場合はスレッド数を増やせる
+        optimal_workers = min(self.max_workers, len(player_data), self.cpu_count * 4)
         
         # 大学ごとの結果を一時保存
         university_results = {}
@@ -768,9 +769,7 @@ class IntegratedTournamentSystem:
             return cached_result
         
         # 実際にJBA照合を実行
-        print(f"🔍 JBA照合開始: {player_name} ({univ})")
-        
-        # デバッグログ（必要時のみ）
+        # 🚀 パフォーマンス改善: ログ出力を削減
         logger.debug(f"🔍 JBA照合開始: {player_name} ({univ})")
         
         start_time = time.time()
@@ -797,6 +796,7 @@ class IntegratedTournamentSystem:
             else:
                 logger.debug(f"  - 背番号: なし（コーチ扱い）")
             
+            # 詳細情報を取得（学年は背番号の有無に関わらず必要）
             verification_result = self.jba_system.verify_player_info(
                 player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
             )
@@ -804,8 +804,6 @@ class IntegratedTournamentSystem:
             # 結果をログに記録
             status = verification_result.get('status')
             logger.debug(f"✅ JBA照合完了: {player_name} -> {status}")
-            
-            print(f"✅ JBA照合完了: {player_name} -> {status}")
         except Exception as e:
             # 🔍 デバッグログ: 例外詳細を強制出力（トレースバック含む）
             logger.error(f"🔍🔍🔍 DEBUG: 例外発生！")
@@ -813,7 +811,7 @@ class IntegratedTournamentSystem:
             logger.error(f"  - 例外メッセージ: {str(e)}")
             logger.error(f"  - トレースバック:", exc_info=True)
             
-            print(f"❌ JBA照合エラー: {player_name} - {e}")
+            logger.error(f"❌ JBA照合エラー: {player_name} - {e}")
             verification_result = {
                 'status': 'error',
                 'message': f'JBA照合エラー: {str(e)}',
