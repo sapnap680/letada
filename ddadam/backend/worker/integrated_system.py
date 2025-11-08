@@ -2,6 +2,7 @@
 # Streamlit removed
 import requests
 import logging
+import random
 
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -613,9 +614,11 @@ class IntegratedTournamentSystem:
         return all_results
     
     def _process_tournament_data_parallel(self, df, university_name=None):
-        """並列処理でJBA照合"""
+        """並列処理でJBA照合（大学ごとに最適化）"""
         import concurrent.futures
         import time
+        import logging
+        logger = logging.getLogger(__name__)
         
         # JBA照合処理を開始（並列処理）
         
@@ -634,62 +637,121 @@ class IntegratedTournamentSystem:
         universities = df['大学名'].unique() if '大学名' in df.columns else [university_name or "Unknown"]
         
         all_results = []
-        # Progress bar removed - use update_job_progress() instead
-        # status_text = st.empty() removed
-        
         start_time = time.time()
         total_players = len(df)
-        processed = 0
         
-        # 全選手のデータを準備（Pandas最適化）
+        logger.info(f"🚀 処理開始: {len(universities)} 大学, {total_players} 選手")
+        
+        # 🚀 パフォーマンス改善: 大学ごとに処理（チーム情報を1回だけ取得）
+        for i, univ in enumerate(universities):
+            logger.info(f"🏫 [{i+1}/{len(universities)}] {univ} を処理中...")
+            
+            # この大学の選手を抽出
+            if '大学名' in df.columns:
+                univ_data = df[df['大学名'] == univ].copy()
+            else:
+                univ_data = df.copy()
+            
+            # ★ この大学のチーム情報を1回だけ事前取得（リアルタイム性を保つ）
+            logger.info(f"📥 {univ} のチーム情報を取得中（リアルタイム）...")
+            preload_start = time.time()
+            self._preload_university_teams(univ)
+            preload_elapsed = time.time() - preload_start
+            logger.info(f"✅ {univ} のチーム取得完了: {preload_elapsed:.2f}秒")
+            
+            # ★ この大学の選手を並列処理（チーム情報はキャッシュから取得）
+            logger.info(f"⚡ {univ} の {len(univ_data)} 名を処理中...")
+            univ_results = self._process_university_players_parallel(univ_data, univ)
+            
+            all_results.extend(univ_results)
+            logger.info(f"✅ {univ} 完了: {len(univ_results)} 名処理")
+            
+            # 🚀 レート制限対策: 大学間のクールダウン（最後の大学以外）
+            if i < len(universities) - 1:
+                cooldown = random.uniform(0.2, 0.5)  # 0.2-0.5秒のランダムクールダウン
+                time.sleep(cooldown)
+        
+        elapsed_time = time.time() - start_time
+        self.performance_stats['total_time'] = elapsed_time
+        
+        # JBA照合統計を表示
+        match_count = len([r for r in all_results if r.get('status') == 'match'])
+        not_found_count = len([r for r in all_results if r.get('status') == 'not_found'])
+        error_count = len([r for r in all_results if r.get('status') == 'error'])
+        
+        print(f"📊 JBA照合統計:")
+        print(f"   総選手数: {len(all_results)}")
+        print(f"   JBA登録あり（〇）: {match_count}")
+        print(f"   JBA登録なし（×）: {not_found_count}")
+        print(f"   エラー: {error_count}")
+        print(f"   総処理時間: {elapsed_time:.2f}秒")
+        
+        return all_results
+    
+    def _preload_university_teams(self, university_name):
+        """大学のチーム情報を事前に1回だけ取得（リアルタイム性を保つ）"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # 検索名を取得
+        search_variations = self.jba_system.get_search_variations(university_name)
+        if not search_variations:
+            return
+        
+        search_name = search_variations[0]
+        
+        # キャッシュに既にある場合はスキップ
+        if search_name in self.jba_system.teams_cache:
+            logger.debug(f"💾 {university_name} のチーム情報は既にキャッシュにあります")
+            return
+        
+        # チーム情報を取得（1回だけ）
+        try:
+            teams = self.jba_system._search_teams_by_university_silent(search_name)
+            # キャッシュに保存
+            self.jba_system.teams_cache[search_name] = teams
+            logger.debug(f"✅ {university_name} のチーム情報を取得: {len(teams)} チーム")
+        except Exception as e:
+            logger.error(f"❌ {university_name} のチーム検索エラー: {e}")
+    
+    def _process_university_players_parallel(self, univ_df, univ):
+        """大学の選手を並列処理（チーム情報はキャッシュから取得）"""
+        import concurrent.futures
+        import time
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # 選手データを準備
         player_data = []
-        
-        # ベクトル化処理で選手名を一括取得
         name_columns = ['選手名', '氏名', 'name', 'Name']
-        available_name_cols = [col for col in name_columns if col in df.columns]
+        available_name_cols = [col for col in name_columns if col in univ_df.columns]
         
         if available_name_cols:
-            # 最初に見つかった名前カラムを使用
             name_col = available_name_cols[0]
-            df[name_col] = df[name_col].astype(str).str.strip()
+            univ_df[name_col] = univ_df[name_col].astype(str).str.strip()
+            valid_players = univ_df[pd.notna(univ_df[name_col]) & (univ_df[name_col] != '')]
             
-            # 大学ごとに処理
-            for univ in universities:
-                if '大学名' in df.columns:
-                    univ_data = df[df['大学名'] == univ].copy()
-                else:
-                    univ_data = df.copy()
-                
-                # 有効な選手名のみを抽出
-                valid_players = univ_data[pd.notna(univ_data[name_col]) & (univ_data[name_col] != '')]
-                
-                for index, row in valid_players.iterrows():
-                    player_name = str(row[name_col]).strip()
-                    if player_name:
-                        player_data.append((index, row, univ, player_name))
+            for index, row in valid_players.iterrows():
+                player_name = str(row[name_col]).strip()
+                if player_name:
+                    player_data.append((index, row, univ, player_name))
         else:
-            # フォールバック: 従来の方法
-            for univ in universities:
-                if '大学名' in df.columns:
-                    univ_data = df[df['大学名'] == univ].copy()
-                else:
-                    univ_data = df.copy()
-                
-                for index, row in univ_data.iterrows():
-                    player_name = None
-                    for col in name_columns:
-                        if col in univ_data.columns and pd.notna(row[col]):
-                            player_name = str(row[col]).strip()
-                            break
-                    
-                    if player_name:
-                        player_data.append((index, row, univ, player_name))
+            # フォールバック
+            for index, row in univ_df.iterrows():
+                player_name = None
+                for col in name_columns:
+                    if col in univ_df.columns and pd.notna(row[col]):
+                        player_name = str(row[col]).strip()
+                        break
+                if player_name:
+                    player_data.append((index, row, univ, player_name))
         
-        # 🚀 パフォーマンス改善: 並列処理でJBA照合（スレッド数を最適化）
-        # キャッシュがある場合はスレッド数を増やせる
+        if not player_data:
+            return []
+        
+        # 並列処理でJBA照合
         optimal_workers = min(self.max_workers, len(player_data), self.cpu_count * 4)
-        
-        # 大学ごとの結果を一時保存
+        results = []
         university_results = {}
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=optimal_workers) as executor:
@@ -704,8 +766,7 @@ class IntegratedTournamentSystem:
             for future in concurrent.futures.as_completed(futures):
                 try:
                     result = future.result()
-                    all_results.append(result)
-                    processed += 1
+                    results.append(result)
                     
                     # 大学ごとの結果を一時保存
                     univ = result.get('university', 'Unknown')
@@ -713,45 +774,14 @@ class IntegratedTournamentSystem:
                         university_results[univ] = []
                     university_results[univ].append(result)
                     
-                    # 進捗更新（10選手ごと）
-                    if processed % 10 == 0 or processed == total_players:
-                        progress = processed / total_players
-                        # Progress update - use update_job_progress(job_id, )
-                        # status update removed - use update_job_message()}")
-                        
-                        # 大学ごとの結果を一時保存（10選手ごと）
-                        if processed % 10 == 0:
-                            for univ_name, univ_results in university_results.items():
-                                self._save_temp_results(univ_name, univ_results)
-                    
                 except Exception as e:
-                    logging.error(f"❌ 処理中にエラーが発生しました: {str(e)}", exc_info=True)
+                    logger.error(f"❌ 処理中にエラーが発生しました: {str(e)}", exc_info=True)
         
-        # 最終的な一時保存
+        # 大学ごとの結果を一時保存
         for univ_name, univ_results in university_results.items():
             self._save_temp_results(univ_name, univ_results)
         
-        elapsed_time = time.time() - start_time
-        self.performance_stats['total_time'] = elapsed_time
-        
-        # 結果をコンパクトに表示 (Streamlit removed)
-        # Metrics removed
-        
-        # JBA照合統計を表示
-        total_players = len(all_results)
-        match_count = len([r for r in all_results if r.get('status') == 'match'])
-        not_found_count = len([r for r in all_results if r.get('status') == 'not_found'])
-        error_count = len([r for r in all_results if r.get('status') == 'error'])
-        
-        print(f"📊 JBA照合統計:")
-        print(f"   総選手数: {total_players}")
-        print(f"   JBA登録あり（〇）: {match_count}")
-        print(f"   JBA登録なし（×）: {not_found_count}")
-        print(f"   エラー: {error_count}")
-        
-        # 並列処理完了
-        
-        return all_results
+        return results
     
     def _process_single_player_parallel(self, index, row, univ, player_name):
         """単一選手の並列処理（キャッシュ付き）"""
