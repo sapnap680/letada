@@ -553,6 +553,7 @@ class JBAVerificationSystem:
             need_position = fields is None or 'position' in fields
             need_school = fields is None or 'school' in fields
             need_uniform = fields is None or 'uniform_number' in fields
+            need_kana_name = fields is None or 'kana_name' in fields
             
             # 身長・体重情報を探す（必要な場合のみ）
             height_patterns = [
@@ -607,6 +608,10 @@ class JBAVerificationSystem:
                         elif need_uniform and ('ユニフォーム番号' in label or '背番号' in label):
                             player_details['uniform_number'] = value
             
+                        # 氏名カナ（必要な場合のみ）
+                        elif need_kana_name and ('氏名カナ' in label or 'カナ名' in label or 'フリガナ' in label or 'ふりがな' in label):
+                            player_details['kana_name'] = value
+            
             # テーブルで見つからない場合は、ページ全体から正規表現で検索（必要な場合のみ）
             if need_height and 'height' not in player_details:
                 page_text = soup.get_text()
@@ -616,7 +621,7 @@ class JBAVerificationSystem:
                     if match:
                         player_details['height'] = match.group(1)
                         break
-            
+                
             if need_weight and 'weight' not in player_details:
                 if 'page_text' not in locals():
                     page_text = soup.get_text()
@@ -701,10 +706,14 @@ class JBAVerificationSystem:
         result = "".join(differences)
         return f"🔍 差分: {result}"
 
-    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None):
+    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None, kana_name=None):
         """個別選手情報の照合（男子チームのみ）"""
         try:
             logger.info(f"🔍 選手照合: {player_name}, 大学: {university}")
+            
+            # 氏名がアルファベットの場合のみ、カナ名で選手名を探す
+            import re
+            is_alphabet_only = bool(re.match(r'^[A-Za-z\s]+$', player_name)) if player_name else False
             
             # ログイン状態チェック
             if not self.logged_in:
@@ -733,7 +742,7 @@ class JBAVerificationSystem:
                     teams = self._search_teams_by_university_silent(search_name)
                     # キャッシュに保存
                     self.teams_cache[search_name] = teams
-                    logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
+                logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
                 except Exception as search_error:
                     logger.error(f"❌ チーム検索エラー ({search_name}): {search_error}")
                     teams = []
@@ -750,7 +759,7 @@ class JBAVerificationSystem:
                         team_data = self.team_members_cache[team['url']]
                         logger.debug(f"💾 キャッシュからメンバー情報を取得: {team['name']}")
                     else:
-                        logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
+                logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
                         team_data = self._get_team_members_silent(team['url'])
                         # キャッシュに保存
                         self.team_members_cache[team['url']] = team_data
@@ -764,22 +773,37 @@ class JBAVerificationSystem:
                     
                     for i, member in enumerate(team_data["members"]):
                         try:
-                            # 名前の類似度チェック
-                            name_similarity = self.calculate_similarity(player_name, member.get("name", ""))
-
-                            # 名前類似度が0.6以上ならJBA登録あり（〇）として扱う
-                            if name_similarity >= 0.6:
+                            # 氏名がアルファベットの場合のみ、カナ名で選手名を探す
+                            search_name = player_name
+                            if is_alphabet_only and kana_name:
+                                # カナ名で選手名を探す（JBAデータの氏名カナと照合）
+                                search_name = kana_name
+                        
+                        # 名前の類似度チェック
+                            name_similarity = self.calculate_similarity(search_name, member.get("name", ""))
+                            
+                            # カナ名も照合（JBAデータの氏名カナと照合）
+                            kana_similarity = 0.0
+                            if kana_name and member.get("kana_name"):
+                                kana_similarity = self.calculate_similarity(kana_name, member.get("kana_name", ""))
+                            
+                            # 名前またはカナ名の類似度が0.6以上ならJBA登録あり（〇）として扱う
+                            max_similarity = max(name_similarity, kana_similarity)
+                            if max_similarity >= 0.6:
                                 # 🚀 パフォーマンス改善: デバッグ情報（マッチした場合のみ）
-                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 類似度: {name_similarity:.3f}")
+                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 名前類似度: {name_similarity:.3f}, カナ類似度: {kana_similarity:.3f}")
                                 
-                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合（背番号がある場合のみ）
-                                # 背番号がない場合は選手名とカナ名だけで照合するため、詳細情報取得は不要
-                                if get_details and member.get("detail_url") and player_no:
+                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
+                            if get_details and member.get("detail_url"):
                                     try:
-                                        # 背番号がある場合は身長・体重・学年を取得
-                                        fields = ['height', 'weight', 'grade']  # 背番号がある場合のみ
+                                        if player_no:
+                                            # 背番号がある場合は身長・体重・学年を取得
+                                            fields = ['height', 'weight', 'grade']
+                                        else:
+                                            # 背番号がない場合はカナ名も取得（照合に使用）
+                                            fields = ['kana_name']
                                         player_details = self.get_player_details(member["detail_url"], fields=fields)
-                                        member.update(player_details)
+                                member.update(player_details)
                                     except Exception as detail_error:
                                         logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
                                 
@@ -787,7 +811,7 @@ class JBAVerificationSystem:
                                 return {
                                     "status": "match",
                                     "jba_data": member,
-                                    "similarity": name_similarity
+                                    "similarity": max_similarity
                                 }
                         
                         except Exception as member_error:

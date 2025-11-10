@@ -516,6 +516,14 @@ class IntegratedTournamentSystem:
                     })
                     continue
                 
+                # カナ名を取得
+                kana_name = None
+                kana_columns = ['カナ名', 'カナ', 'kana', 'Kana', 'フリガナ', 'ふりがな']
+                for col in kana_columns:
+                    if col in row.index and pd.notna(row[col]):
+                        kana_name = str(row[col]).strip()
+                        break
+                
                 # CSVから背番号（No）を取得（数字のみ有効）
                 # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
                 player_no = None
@@ -530,7 +538,7 @@ class IntegratedTournamentSystem:
                 
                 # JBA照合
                 verification_result = self.jba_system.verify_player_info(
-                    player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
+                    player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no, kana_name=kana_name
                 )
                 
                 result = {
@@ -556,44 +564,48 @@ class IntegratedTournamentSystem:
                         # 背番号がある場合のみ身長・体重を照合
                         if player_no:
                             # 身長の照合（5cm以上差があったらJBAの値に変更）
-                            if 'height' in jba_data and jba_data['height']:
+                        if 'height' in jba_data and jba_data['height']:
                                 try:
-                                    jba_height = float(str(jba_data['height']).replace('cm', '').strip())
-                                    csv_height_str = str(corrected_data.get('身長', '')).replace('cm', '').strip()
-                                    if csv_height_str and csv_height_str.replace('.', '').isdigit():
-                                        csv_height = float(csv_height_str)
-                                        height_diff = abs(csv_height - jba_height)
-                                        if height_diff >= 5.0:
+                                    jba_height_str = str(jba_data['height']).replace('cm', '').strip()
+                                    # 値が空、0.0、nanの場合は空欄のまま
+                                    if jba_height_str and jba_height_str.lower() not in ['', 'nan', 'none', '0', '0.0']:
+                                        jba_height = float(jba_height_str)
+                                        csv_height_str = str(corrected_data.get('身長', '')).replace('cm', '').strip()
+                                        if csv_height_str and csv_height_str.replace('.', '').isdigit():
+                                            csv_height = float(csv_height_str)
+                                            height_diff = abs(csv_height - jba_height)
+                                            if height_diff >= 5.0:
+                                                corrected_data['身長'] = f"{jba_height}cm"
+                                                changed_fields.add('身長')
+                                        else:
+                                            # CSVに身長がない場合はJBAの値を使用
                                             corrected_data['身長'] = f"{jba_height}cm"
                                             changed_fields.add('身長')
-                                    else:
-                                        # CSVに身長がない場合はJBAの値を使用
-                                        corrected_data['身長'] = f"{jba_height}cm"
-                                        changed_fields.add('身長')
                                 except (ValueError, AttributeError):
-                                    # パースエラーの場合はJBAの値を使用
-                                    corrected_data['身長'] = f"{jba_data['height']}cm"
-                                    changed_fields.add('身長')
+                                    # パースエラーの場合は空欄のまま（何もしない）
+                                    pass
                             
                             # 体重の照合（5kg以上差があったらJBAの値に変更）
-                            if 'weight' in jba_data and jba_data['weight']:
+                        if 'weight' in jba_data and jba_data['weight']:
                                 try:
-                                    jba_weight = float(str(jba_data['weight']).replace('kg', '').strip())
-                                    csv_weight_str = str(corrected_data.get('体重', '')).replace('kg', '').strip()
-                                    if csv_weight_str and csv_weight_str.replace('.', '').isdigit():
-                                        csv_weight = float(csv_weight_str)
-                                        weight_diff = abs(csv_weight - jba_weight)
-                                        if weight_diff >= 5.0:
+                                    jba_weight_str = str(jba_data['weight']).replace('kg', '').strip()
+                                    # 値が空、0.0、nanの場合は空欄のまま
+                                    if jba_weight_str and jba_weight_str.lower() not in ['', 'nan', 'none', '0', '0.0']:
+                                        jba_weight = float(jba_weight_str)
+                                        csv_weight_str = str(corrected_data.get('体重', '')).replace('kg', '').strip()
+                                        if csv_weight_str and csv_weight_str.replace('.', '').isdigit():
+                                            csv_weight = float(csv_weight_str)
+                                            weight_diff = abs(csv_weight - jba_weight)
+                                            if weight_diff >= 5.0:
+                                                corrected_data['体重'] = f"{jba_weight}kg"
+                                                changed_fields.add('体重')
+                            else:
+                                            # CSVに体重がない場合はJBAの値を使用
                                             corrected_data['体重'] = f"{jba_weight}kg"
                                             changed_fields.add('体重')
-                                    else:
-                                        # CSVに体重がない場合はJBAの値を使用
-                                        corrected_data['体重'] = f"{jba_weight}kg"
-                                        changed_fields.add('体重')
                                 except (ValueError, AttributeError):
-                                    # パースエラーの場合はJBAの値を使用
-                                    corrected_data['体重'] = f"{jba_data['weight']}kg"
-                                    changed_fields.add('体重')
+                                    # パースエラーの場合は空欄のまま（何もしない）
+                                    pass
                         
                         # 学年の照合（背番号がある場合のみ、JBAが正しいので異なる場合はJBAに合わせる）
                         # 背番号がない場合は選手名とカナ名だけで照合するため、学年の照合は不要
@@ -639,8 +651,8 @@ class IntegratedTournamentSystem:
                         
                         # 変更されたフィールド情報を保存
                         result['changed_fields'] = changed_fields
-                        
-                        result['correction'] = corrected_data
+                    
+                    result['correction'] = corrected_data
                         result['message'] = 'JBA登録あり（〇）'
                     else:
                         result['correction'] = None
@@ -832,21 +844,21 @@ class IntegratedTournamentSystem:
             name_col = available_name_cols[0]
             univ_df[name_col] = univ_df[name_col].astype(str).str.strip()
             valid_players = univ_df[pd.notna(univ_df[name_col]) & (univ_df[name_col] != '')]
-            
-            for index, row in valid_players.iterrows():
-                player_name = str(row[name_col]).strip()
-                if player_name:
-                    player_data.append((index, row, univ, player_name))
+                
+                for index, row in valid_players.iterrows():
+                    player_name = str(row[name_col]).strip()
+                    if player_name:
+                        player_data.append((index, row, univ, player_name))
         else:
             # フォールバック
             for index, row in univ_df.iterrows():
-                player_name = None
-                for col in name_columns:
+                    player_name = None
+                    for col in name_columns:
                     if col in univ_df.columns and pd.notna(row[col]):
-                        player_name = str(row[col]).strip()
-                        break
-                if player_name:
-                    player_data.append((index, row, univ, player_name))
+                            player_name = str(row[col]).strip()
+                            break
+                    if player_name:
+                        player_data.append((index, row, univ, player_name))
         
         if not player_data:
             return []
@@ -924,6 +936,14 @@ class IntegratedTournamentSystem:
                         break
                     # 数値以外（「トレーナー」「学生コーチ」など）はplayer_no = Noneのまま
             
+            # カナ名を取得
+            kana_name = None
+            kana_columns = ['カナ名', 'カナ', 'kana', 'Kana', 'フリガナ', 'ふりがな']
+            for col in kana_columns:
+                if col in row.index and pd.notna(row[col]):
+                    kana_name = str(row[col]).strip()
+                    break
+            
             # 🔍 デバッグログ: 背番号情報
             if player_no:
                 logger.debug(f"  - 背番号: {player_no}")
@@ -932,7 +952,7 @@ class IntegratedTournamentSystem:
             
             # 詳細情報を取得（学年は背番号の有無に関わらず必要）
             verification_result = self.jba_system.verify_player_info(
-                player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no
+                player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no, kana_name=kana_name
             )
             
             # 結果をログに記録
@@ -1000,44 +1020,48 @@ class IntegratedTournamentSystem:
                 # 背番号がある場合のみ身長・体重を照合
                 if player_no:
                     # 身長の照合（5cm以上差があったらJBAの値に変更）
-                    if 'height' in jba_data and jba_data['height']:
+                if 'height' in jba_data and jba_data['height']:
                         try:
-                            jba_height = float(str(jba_data['height']).replace('cm', '').strip())
-                            csv_height_str = str(corrected_data.get('身長', '')).replace('cm', '').strip()
-                            if csv_height_str and csv_height_str.replace('.', '').isdigit():
-                                csv_height = float(csv_height_str)
-                                height_diff = abs(csv_height - jba_height)
-                                if height_diff >= 5.0:
+                            jba_height_str = str(jba_data['height']).replace('cm', '').strip()
+                            # 値が空、0.0、nanの場合は空欄のまま
+                            if jba_height_str and jba_height_str.lower() not in ['', 'nan', 'none', '0', '0.0']:
+                                jba_height = float(jba_height_str)
+                                csv_height_str = str(corrected_data.get('身長', '')).replace('cm', '').strip()
+                                if csv_height_str and csv_height_str.replace('.', '').isdigit():
+                                    csv_height = float(csv_height_str)
+                                    height_diff = abs(csv_height - jba_height)
+                                    if height_diff >= 5.0:
+                                        corrected_data['身長'] = f"{jba_height}cm"
+                                        changed_fields.add('身長')
+                                else:
+                                    # CSVに身長がない場合はJBAの値を使用
                                     corrected_data['身長'] = f"{jba_height}cm"
                                     changed_fields.add('身長')
-                            else:
-                                # CSVに身長がない場合はJBAの値を使用
-                                corrected_data['身長'] = f"{jba_height}cm"
-                                changed_fields.add('身長')
                         except (ValueError, AttributeError):
-                            # パースエラーの場合はJBAの値を使用
-                            corrected_data['身長'] = f"{jba_data['height']}cm"
-                            changed_fields.add('身長')
+                            # パースエラーの場合は空欄のまま（何もしない）
+                            pass
                     
                     # 体重の照合（5kg以上差があったらJBAの値に変更）
                     if 'weight' in jba_data and jba_data['weight']:
                         try:
-                            jba_weight = float(str(jba_data['weight']).replace('kg', '').strip())
-                            csv_weight_str = str(corrected_data.get('体重', '')).replace('kg', '').strip()
-                            if csv_weight_str and csv_weight_str.replace('.', '').isdigit():
-                                csv_weight = float(csv_weight_str)
-                                weight_diff = abs(csv_weight - jba_weight)
-                                if weight_diff >= 5.0:
+                            jba_weight_str = str(jba_data['weight']).replace('kg', '').strip()
+                            # 値が空、0.0、nanの場合は空欄のまま
+                            if jba_weight_str and jba_weight_str.lower() not in ['', 'nan', 'none', '0', '0.0']:
+                                jba_weight = float(jba_weight_str)
+                                csv_weight_str = str(corrected_data.get('体重', '')).replace('kg', '').strip()
+                                if csv_weight_str and csv_weight_str.replace('.', '').isdigit():
+                                    csv_weight = float(csv_weight_str)
+                                    weight_diff = abs(csv_weight - jba_weight)
+                                    if weight_diff >= 5.0:
+                                        corrected_data['体重'] = f"{jba_weight}kg"
+                                        changed_fields.add('体重')
+            else:
+                                    # CSVに体重がない場合はJBAの値を使用
                                     corrected_data['体重'] = f"{jba_weight}kg"
                                     changed_fields.add('体重')
-                            else:
-                                # CSVに体重がない場合はJBAの値を使用
-                                corrected_data['体重'] = f"{jba_weight}kg"
-                                changed_fields.add('体重')
                         except (ValueError, AttributeError):
-                            # パースエラーの場合はJBAの値を使用
-                            corrected_data['体重'] = f"{jba_data['weight']}kg"
-                            changed_fields.add('体重')
+                            # パースエラーの場合は空欄のまま（何もしない）
+                            pass
                 
                 # 学年の照合（背番号がある場合のみ、JBAが正しいので異なる場合はJBAに合わせる）
                 # 背番号がない場合は選手名とカナ名だけで照合するため、学年の照合は不要
@@ -1083,8 +1107,8 @@ class IntegratedTournamentSystem:
                 
                 # 変更されたフィールド情報を保存
                 result['changed_fields'] = changed_fields
-                
-                result['correction'] = corrected_data
+            
+            result['correction'] = corrected_data
                 result['message'] = 'JBA登録あり（〇）'
             else:
                 result['correction'] = None
@@ -1428,7 +1452,28 @@ class IntegratedTournamentSystem:
                 page_results = results[start_idx:end_idx]
                 
                 # テーブルデータ作成（画像の形式に準拠）
-                data = [["No", "選手名", "カナ名", "学部", "学年", "身長", "体重", "ポジション", "出身校", "JBA"]]
+                # ヘッダー行をParagraphに変換（英語が正しく表示されるように）
+                header_style = ParagraphStyle(
+                    'HeaderStyle',
+                    parent=styles['Normal'],
+                    fontSize=5,
+                    leading=6,
+                    fontName='Helvetica-Bold',  # 英語用フォント
+                    alignment=1  # CENTER
+                )
+                header_row = [
+                    Paragraph("No", header_style),
+                    Paragraph("選手名", header_style),
+                    Paragraph("カナ名", header_style),
+                    Paragraph("学部", header_style),
+                    Paragraph("学年", header_style),
+                    Paragraph("身長", header_style),
+                    Paragraph("体重", header_style),
+                    Paragraph("ポジション", header_style),
+                    Paragraph("出身校", header_style),
+                    Paragraph("JBA", header_style)
+                ]
+                data = [header_row]
                 
                 for idx, r in enumerate(page_results, start=start_idx+1):
                     d = r["original_data"]
@@ -1597,8 +1642,7 @@ class IntegratedTournamentSystem:
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),  # 中央揃えに変更
-                ("FONTNAME", (0, 0), (-1, 0), getattr(self, 'default_font', 'MS-Gothic')),
-                ("FONTSIZE", (0, 0), (-1, 0), 5),  # ヘッダーフォントサイズ（final_100_outputと同じ）
+                # ヘッダー行はParagraphで作成しているため、FONTNAMEとFONTSIZEは不要
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 2),  # ヘッダーパディング（final_100_outputと同じ）
                 
                 # データ行
