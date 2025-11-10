@@ -517,11 +517,13 @@ class IntegratedTournamentSystem:
                     continue
                 
                 # CSVから背番号（No）を取得（数字のみ有効）
+                # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
                 player_no = None
                 no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
                 for col in no_columns:
                     if col in row.index and pd.notna(row[col]):
                         value = str(row[col]).strip()
+                        # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
                         if value.isdigit() or value.replace('.', '').isdigit():
                             player_no = value
                             break
@@ -548,7 +550,10 @@ class IntegratedTournamentSystem:
                         
                         corrected_data = row.to_dict().copy()
                         
-                        # 背番号がある場合のみ身長・体重・学年を照合
+                        # 変更されたフィールドを追跡（赤字表示用）
+                        changed_fields = set()
+                        
+                        # 背番号がある場合のみ身長・体重を照合
                         if player_no:
                             # 身長の照合（5cm以上差があったらJBAの値に変更）
                             if 'height' in jba_data and jba_data['height']:
@@ -560,12 +565,15 @@ class IntegratedTournamentSystem:
                                         height_diff = abs(csv_height - jba_height)
                                         if height_diff >= 5.0:
                                             corrected_data['身長'] = f"{jba_height}cm"
+                                            changed_fields.add('身長')
                                     else:
                                         # CSVに身長がない場合はJBAの値を使用
                                         corrected_data['身長'] = f"{jba_height}cm"
+                                        changed_fields.add('身長')
                                 except (ValueError, AttributeError):
                                     # パースエラーの場合はJBAの値を使用
                                     corrected_data['身長'] = f"{jba_data['height']}cm"
+                                    changed_fields.add('身長')
                             
                             # 体重の照合（5kg以上差があったらJBAの値に変更）
                             if 'weight' in jba_data and jba_data['weight']:
@@ -577,20 +585,41 @@ class IntegratedTournamentSystem:
                                         weight_diff = abs(csv_weight - jba_weight)
                                         if weight_diff >= 5.0:
                                             corrected_data['体重'] = f"{jba_weight}kg"
+                                            changed_fields.add('体重')
                                     else:
                                         # CSVに体重がない場合はJBAの値を使用
                                         corrected_data['体重'] = f"{jba_weight}kg"
+                                        changed_fields.add('体重')
                                 except (ValueError, AttributeError):
                                     # パースエラーの場合はJBAの値を使用
                                     corrected_data['体重'] = f"{jba_data['weight']}kg"
+                                    changed_fields.add('体重')
                         
-                        # 学年の照合（背番号の有無に関わらず、JBAが正しいので異なる場合はJBAに合わせる）
-                        if 'grade' in jba_data and jba_data['grade']:
-                            original_grade = corrected_data.get('学年', '')
-                            if str(jba_data['grade']) != str(original_grade):
-                                corrected_data['学年'] = jba_data['grade']
+                        # 学年の照合（背番号がある場合のみ、JBAが正しいので異なる場合はJBAに合わせる）
+                        # 背番号がない場合は選手名とカナ名だけで照合するため、学年の照合は不要
+                        if player_no and 'grade' in jba_data and jba_data['grade']:
+                            original_grade = str(corrected_data.get('学年', '')).strip()
+                            jba_grade = str(jba_data['grade']).strip()
+                            # 数値として比較（文字列の不一致を防ぐ）
+                            try:
+                                original_grade_num = float(original_grade) if original_grade.replace('.', '').isdigit() else None
+                                jba_grade_num = float(jba_grade) if jba_grade.replace('.', '').isdigit() else None
+                                if original_grade_num is not None and jba_grade_num is not None:
+                                    if abs(original_grade_num - jba_grade_num) >= 0.1:  # 0.1以上の差がある場合のみ変更
+                                        corrected_data['学年'] = jba_grade
+                                        changed_fields.add('学年')
+                                elif original_grade != jba_grade:
+                                    corrected_data['学年'] = jba_grade
+                                    changed_fields.add('学年')
+                            except (ValueError, AttributeError):
+                                if original_grade != jba_grade:
+                                    corrected_data['学年'] = jba_grade
+                                    changed_fields.add('学年')
                         
                         # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
+                        
+                        # 変更されたフィールド情報を保存
+                        result['changed_fields'] = changed_fields
                         
                         result['correction'] = corrected_data
                         result['message'] = 'JBA登録あり（〇）'
@@ -859,20 +888,22 @@ class IntegratedTournamentSystem:
         start_time = time.time()
         try:
             # CSVから背番号（No）を取得（数字のみ有効）
+            # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
             player_no = None
             no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
             
             for col in no_columns:
                 if col in row.index and pd.notna(row[col]):
                     value = str(row[col]).strip()
-                    # 数字のみ有効（「トレーナー」「学生コーチ」などは無視）
+                    # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
                     if value.isdigit():
                         player_no = value
                         break
-                    # 数字を含む文字列（例: "10"）も有効
+                    # 数字を含む文字列（例: "10.5"）も有効
                     elif value.replace('.', '').isdigit():
                         player_no = value
                         break
+                    # 数値以外（「トレーナー」「学生コーチ」など）はplayer_no = Noneのまま
             
             # 🔍 デバッグログ: 背番号情報
             if player_no:
@@ -915,12 +946,14 @@ class IntegratedTournamentSystem:
         )
         
         # player_no を取得（エラー時は None）
+        # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
         player_no = None
         try:
             no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
             for col in no_columns:
                 if col in row.index and pd.notna(row[col]):
                     value = str(row[col]).strip()
+                    # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
                     if value.isdigit() or value.replace('.', '').isdigit():
                         player_no = value
                         break
@@ -942,7 +975,10 @@ class IntegratedTournamentSystem:
                 jba_data = verification_result['jba_data']
                 corrected_data = row.to_dict().copy()
                 
-                # 背番号がある場合のみ身長・体重・学年を照合
+                # 変更されたフィールドを追跡（赤字表示用）
+                changed_fields = set()
+                
+                # 背番号がある場合のみ身長・体重を照合
                 if player_no:
                     # 身長の照合（5cm以上差があったらJBAの値に変更）
                     if 'height' in jba_data and jba_data['height']:
@@ -954,12 +990,15 @@ class IntegratedTournamentSystem:
                                 height_diff = abs(csv_height - jba_height)
                                 if height_diff >= 5.0:
                                     corrected_data['身長'] = f"{jba_height}cm"
+                                    changed_fields.add('身長')
                             else:
                                 # CSVに身長がない場合はJBAの値を使用
                                 corrected_data['身長'] = f"{jba_height}cm"
+                                changed_fields.add('身長')
                         except (ValueError, AttributeError):
                             # パースエラーの場合はJBAの値を使用
                             corrected_data['身長'] = f"{jba_data['height']}cm"
+                            changed_fields.add('身長')
                     
                     # 体重の照合（5kg以上差があったらJBAの値に変更）
                     if 'weight' in jba_data and jba_data['weight']:
@@ -971,21 +1010,41 @@ class IntegratedTournamentSystem:
                                 weight_diff = abs(csv_weight - jba_weight)
                                 if weight_diff >= 5.0:
                                     corrected_data['体重'] = f"{jba_weight}kg"
+                                    changed_fields.add('体重')
                             else:
                                 # CSVに体重がない場合はJBAの値を使用
                                 corrected_data['体重'] = f"{jba_weight}kg"
+                                changed_fields.add('体重')
                         except (ValueError, AttributeError):
                             # パースエラーの場合はJBAの値を使用
                             corrected_data['体重'] = f"{jba_data['weight']}kg"
-                    
+                            changed_fields.add('体重')
                 
-                # 学年の照合（背番号の有無に関わらず、JBAが正しいので異なる場合はJBAに合わせる）
-                if 'grade' in jba_data and jba_data['grade']:
-                    original_grade = corrected_data.get('学年', '')
-                    if str(jba_data['grade']) != str(original_grade):
-                        corrected_data['学年'] = jba_data['grade']
+                # 学年の照合（背番号がある場合のみ、JBAが正しいので異なる場合はJBAに合わせる）
+                # 背番号がない場合は選手名とカナ名だけで照合するため、学年の照合は不要
+                if player_no and 'grade' in jba_data and jba_data['grade']:
+                    original_grade = str(corrected_data.get('学年', '')).strip()
+                    jba_grade = str(jba_data['grade']).strip()
+                    # 数値として比較（文字列の不一致を防ぐ）
+                    try:
+                        original_grade_num = float(original_grade) if original_grade.replace('.', '').isdigit() else None
+                        jba_grade_num = float(jba_grade) if jba_grade.replace('.', '').isdigit() else None
+                        if original_grade_num is not None and jba_grade_num is not None:
+                            if abs(original_grade_num - jba_grade_num) >= 0.1:  # 0.1以上の差がある場合のみ変更
+                                corrected_data['学年'] = jba_grade
+                                changed_fields.add('学年')
+                        elif original_grade != jba_grade:
+                            corrected_data['学年'] = jba_grade
+                            changed_fields.add('学年')
+                    except (ValueError, AttributeError):
+                        if original_grade != jba_grade:
+                            corrected_data['学年'] = jba_grade
+                            changed_fields.add('学年')
                 
                 # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
+                
+                # 変更されたフィールド情報を保存
+                result['changed_fields'] = changed_fields
                 
                 result['correction'] = corrected_data
                 result['message'] = 'JBA登録あり（〇）'
@@ -1355,31 +1414,27 @@ class IntegratedTournamentSystem:
                     height = d.get("身長", "")
                     weight = d.get("体重", "")
                     
-                    # 身長・体重・学年の小数点以下を切り捨て（単位付きも対応）
+                    # 身長・体重・学年の小数点以下を切り捨て（数字のみ表示）
                     import re
                     
                     if height:
                         height_str = str(height)
-                        # 数値部分を抽出して小数点以下を切り捨て
+                        # 数値部分を抽出して小数点以下を切り捨て（単位は除去）
                         height_match = re.search(r'(\d+(?:\.\d+)?)', height_str)
                         if height_match:
                             try:
                                 height_num = int(float(height_match.group(1)))
-                                # 単位を保持（cm, kg等）
-                                unit = re.sub(r'\d+(?:\.\d+)?', '', height_str).strip()
-                                height = f"{height_num}{unit}" if unit else str(height_num)
+                                height = str(height_num)  # 数字のみ表示
                             except (ValueError, TypeError):
                                 pass
                     if weight:
                         weight_str = str(weight)
-                        # 数値部分を抽出して小数点以下を切り捨て
+                        # 数値部分を抽出して小数点以下を切り捨て（単位は除去）
                         weight_match = re.search(r'(\d+(?:\.\d+)?)', weight_str)
                         if weight_match:
                             try:
                                 weight_num = int(float(weight_match.group(1)))
-                                # 単位を保持（cm, kg等）
-                                unit = re.sub(r'\d+(?:\.\d+)?', '', weight_str).strip()
-                                weight = f"{weight_num}{unit}" if unit else str(weight_num)
+                                weight = str(weight_num)  # 数字のみ表示
                             except (ValueError, TypeError):
                                 pass
                     if grade:
@@ -1395,18 +1450,15 @@ class IntegratedTournamentSystem:
                     position = d.get("ポジション", "")
                     school = d.get("出身校", "")
                     
-                    # 変更があった場合は赤字で表示
+                    # 変更があった場合は赤字で表示（changed_fieldsを使用）
                     if r.get("correction"):
                         corrected_data = r["correction"]
-                        if corrected_data.get("No") != no:
-                            no = f'<font color="red">{corrected_data.get("No", no)}</font>'
-                        if corrected_data.get("選手名") != player_name:
-                            player_name = f'<font color="red">{corrected_data.get("選手名", player_name)}</font>'
-                        if corrected_data.get("カナ名") != kana_name:
-                            kana_name = f'<font color="red">{corrected_data.get("カナ名", kana_name)}</font>'
-                        if corrected_data.get("学部") != department:
-                            department = f'<font color="red">{corrected_data.get("学部", department)}</font>'
-                        if corrected_data.get("学年") != grade:
+                        changed_fields = r.get("changed_fields", set())
+                        
+                        # 学部は一切変更しないので、比較処理を削除
+                        
+                        # 学年が変更された場合のみ赤字で表示
+                        if '学年' in changed_fields:
                             corrected_grade = corrected_data.get("学年", grade)
                             # 修正された学年も小数点以下を切り捨て
                             if corrected_grade:
@@ -1419,38 +1471,38 @@ class IntegratedTournamentSystem:
                                     except (ValueError, TypeError):
                                         pass
                             grade = f'<font color="red">{corrected_grade}</font>'
-                        if corrected_data.get("身長") != height:
+                        
+                        # 身長が変更された場合のみ赤字で表示
+                        if '身長' in changed_fields:
                             corrected_height = corrected_data.get("身長", height)
-                            # 修正された身長も小数点以下を切り捨て（単位付きも対応）
+                            # 修正された身長も小数点以下を切り捨て（数字のみ表示）
                             if corrected_height:
                                 corrected_height_str = str(corrected_height)
                                 corrected_height_match = re.search(r'(\d+(?:\.\d+)?)', corrected_height_str)
                                 if corrected_height_match:
                                     try:
                                         corrected_height_num = int(float(corrected_height_match.group(1)))
-                                        unit = re.sub(r'\d+(?:\.\d+)?', '', corrected_height_str).strip()
-                                        corrected_height = f"{corrected_height_num}{unit}" if unit else str(corrected_height_num)
+                                        corrected_height = str(corrected_height_num)  # 数字のみ表示
                                     except (ValueError, TypeError):
                                         pass
                             height = f'<font color="red">{corrected_height}</font>'
-                        if corrected_data.get("体重") != weight:
+                        
+                        # 体重が変更された場合のみ赤字で表示
+                        if '体重' in changed_fields:
                             corrected_weight = corrected_data.get("体重", weight)
-                            # 修正された体重も小数点以下を切り捨て（単位付きも対応）
+                            # 修正された体重も小数点以下を切り捨て（数字のみ表示）
                             if corrected_weight:
                                 corrected_weight_str = str(corrected_weight)
                                 corrected_weight_match = re.search(r'(\d+(?:\.\d+)?)', corrected_weight_str)
                                 if corrected_weight_match:
                                     try:
                                         corrected_weight_num = int(float(corrected_weight_match.group(1)))
-                                        unit = re.sub(r'\d+(?:\.\d+)?', '', corrected_weight_str).strip()
-                                        corrected_weight = f"{corrected_weight_num}{unit}" if unit else str(corrected_weight_num)
+                                        corrected_weight = str(corrected_weight_num)  # 数字のみ表示
                                     except (ValueError, TypeError):
                                         pass
                             weight = f'<font color="red">{corrected_weight}</font>'
-                        if corrected_data.get("ポジション") != position:
-                            position = f'<font color="red">{corrected_data.get("ポジション", position)}</font>'
-                        if corrected_data.get("出身校") != school:
-                            school = f'<font color="red">{corrected_data.get("出身校", school)}</font>'
+                        
+                        # ポジション・出身校はCSVのデータをそのまま使用（変更しないので赤字表示不要）
                     
                     # 数値系はタグを壊さないようにトリムせずにそのまま出力
                     row_data = [

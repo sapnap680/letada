@@ -772,15 +772,12 @@ class JBAVerificationSystem:
                                 # 🚀 パフォーマンス改善: デバッグ情報（マッチした場合のみ）
                                 logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 類似度: {name_similarity:.3f}")
                                 
-                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合（必要最小限のフィールドのみ）
-                                if get_details and member.get("detail_url"):
+                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合（背番号がある場合のみ）
+                                # 背番号がない場合は選手名とカナ名だけで照合するため、詳細情報取得は不要
+                                if get_details and member.get("detail_url") and player_no:
                                     try:
-                                        # 背番号がある場合は身長・体重・学年を取得、ない場合は学年のみ取得
-                                        if player_no:
-                                            fields = ['height', 'weight', 'grade']  # 背番号がある場合
-                                        else:
-                                            fields = ['grade']  # 背番号がない場合（学年のみ）
-                                        
+                                        # 背番号がある場合は身長・体重・学年を取得
+                                        fields = ['height', 'weight', 'grade']  # 背番号がある場合のみ
                                         player_details = self.get_player_details(member["detail_url"], fields=fields)
                                         member.update(player_details)
                                     except Exception as detail_error:
