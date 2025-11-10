@@ -600,21 +600,40 @@ class IntegratedTournamentSystem:
                         if player_no and 'grade' in jba_data and jba_data['grade']:
                             original_grade = str(corrected_data.get('学年', '')).strip()
                             jba_grade = str(jba_data['grade']).strip()
-                            # 数値として比較（文字列の不一致を防ぐ）
-                            try:
-                                original_grade_num = float(original_grade) if original_grade.replace('.', '').isdigit() else None
-                                jba_grade_num = float(jba_grade) if jba_grade.replace('.', '').isdigit() else None
-                                if original_grade_num is not None and jba_grade_num is not None:
-                                    if abs(original_grade_num - jba_grade_num) >= 0.1:  # 0.1以上の差がある場合のみ変更
-                                        corrected_data['学年'] = jba_grade
-                                        changed_fields.add('学年')
-                                elif original_grade != jba_grade:
+                            # 数字部分だけを抽出して比較（「2」と「大学2年」などに対応）
+                            import re
+                            original_grade_match = re.search(r'(\d+(?:\.\d+)?)', original_grade)
+                            jba_grade_match = re.search(r'(\d+(?:\.\d+)?)', jba_grade)
+                            
+                            if original_grade_match and jba_grade_match:
+                                # 数字部分が一致しているか確認
+                                original_grade_num = float(original_grade_match.group(1))
+                                jba_grade_num = float(jba_grade_match.group(1))
+                                if abs(original_grade_num - jba_grade_num) >= 0.1:  # 0.1以上の差がある場合のみ変更
                                     corrected_data['学年'] = jba_grade
                                     changed_fields.add('学年')
-                            except (ValueError, AttributeError):
-                                if original_grade != jba_grade:
-                                    corrected_data['学年'] = jba_grade
-                                    changed_fields.add('学年')
+                                # 数字が一致していれば正しい判定（changed_fieldsに追加しない）
+                            elif original_grade != jba_grade:
+                                # 数字が見つからない場合は文字列比較
+                                corrected_data['学年'] = jba_grade
+                                changed_fields.add('学年')
+                        
+                        # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
+                        if 'name' in jba_data and jba_data['name']:
+                            jba_name = str(jba_data['name']).strip()
+                            csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
+                            if jba_name != csv_name:
+                                corrected_data['選手名'] = jba_name
+                                if '氏名' in corrected_data:
+                                    corrected_data['氏名'] = jba_name
+                                changed_fields.add('選手名')
+                        
+                        if 'kana_name' in jba_data and jba_data['kana_name']:
+                            jba_kana = str(jba_data['kana_name']).strip()
+                            csv_kana = str(corrected_data.get('カナ名', '')).strip()
+                            if jba_kana != csv_kana:
+                                corrected_data['カナ名'] = jba_kana
+                                changed_fields.add('カナ名')
                         
                         # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
                         
@@ -1025,21 +1044,40 @@ class IntegratedTournamentSystem:
                 if player_no and 'grade' in jba_data and jba_data['grade']:
                     original_grade = str(corrected_data.get('学年', '')).strip()
                     jba_grade = str(jba_data['grade']).strip()
-                    # 数値として比較（文字列の不一致を防ぐ）
-                    try:
-                        original_grade_num = float(original_grade) if original_grade.replace('.', '').isdigit() else None
-                        jba_grade_num = float(jba_grade) if jba_grade.replace('.', '').isdigit() else None
-                        if original_grade_num is not None and jba_grade_num is not None:
-                            if abs(original_grade_num - jba_grade_num) >= 0.1:  # 0.1以上の差がある場合のみ変更
-                                corrected_data['学年'] = jba_grade
-                                changed_fields.add('学年')
-                        elif original_grade != jba_grade:
+                    # 数字部分だけを抽出して比較（「2」と「大学2年」などに対応）
+                    import re
+                    original_grade_match = re.search(r'(\d+(?:\.\d+)?)', original_grade)
+                    jba_grade_match = re.search(r'(\d+(?:\.\d+)?)', jba_grade)
+                    
+                    if original_grade_match and jba_grade_match:
+                        # 数字部分が一致しているか確認
+                        original_grade_num = float(original_grade_match.group(1))
+                        jba_grade_num = float(jba_grade_match.group(1))
+                        if abs(original_grade_num - jba_grade_num) >= 0.1:  # 0.1以上の差がある場合のみ変更
                             corrected_data['学年'] = jba_grade
                             changed_fields.add('学年')
-                    except (ValueError, AttributeError):
-                        if original_grade != jba_grade:
-                            corrected_data['学年'] = jba_grade
-                            changed_fields.add('学年')
+                        # 数字が一致していれば正しい判定（changed_fieldsに追加しない）
+                    elif original_grade != jba_grade:
+                        # 数字が見つからない場合は文字列比較
+                        corrected_data['学年'] = jba_grade
+                        changed_fields.add('学年')
+                
+                # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
+                if 'name' in jba_data and jba_data['name']:
+                    jba_name = str(jba_data['name']).strip()
+                    csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
+                    if jba_name != csv_name:
+                        corrected_data['選手名'] = jba_name
+                        if '氏名' in corrected_data:
+                            corrected_data['氏名'] = jba_name
+                        changed_fields.add('選手名')
+                
+                if 'kana_name' in jba_data and jba_data['kana_name']:
+                    jba_kana = str(jba_data['kana_name']).strip()
+                    csv_kana = str(corrected_data.get('カナ名', '')).strip()
+                    if jba_kana != csv_kana:
+                        corrected_data['カナ名'] = jba_kana
+                        changed_fields.add('カナ名')
                 
                 # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
                 
@@ -1457,6 +1495,16 @@ class IntegratedTournamentSystem:
                         
                         # 学部は一切変更しないので、比較処理を削除
                         
+                        # 選手名が変更された場合のみ赤字で表示
+                        if '選手名' in changed_fields:
+                            corrected_name = corrected_data.get("選手名", player_name)
+                            player_name = f'<font color="red">{corrected_name}</font>'
+                        
+                        # カナ名が変更された場合のみ赤字で表示
+                        if 'カナ名' in changed_fields:
+                            corrected_kana = corrected_data.get("カナ名", kana_name)
+                            kana_name = f'<font color="red">{corrected_kana}</font>'
+                        
                         # 学年が変更された場合のみ赤字で表示
                         if '学年' in changed_fields:
                             corrected_grade = corrected_data.get("学年", grade)
@@ -1522,7 +1570,9 @@ class IntegratedTournamentSystem:
                     # 特定の列に適切なフォントサイズを適用
                     formatted_row_data = []
                     for i, cell in enumerate(row_data):
-                        if i in [1, 2]:  # 選手名(1)、カナ名(2)の列 - 20文字入るように
+                        if i == 0:  # No(0)の列 - 選手名と同じサイズ
+                            formatted_row_data.append(Paragraph(str(cell), small_compact_style))
+                        elif i in [1, 2]:  # 選手名(1)、カナ名(2)の列 - 20文字入るように
                             formatted_row_data.append(Paragraph(str(cell), small_compact_style))
                         elif i == 3:  # 学部(3)の列 - 15文字入るように
                             formatted_row_data.append(Paragraph(str(cell), department_compact_style))
