@@ -522,19 +522,23 @@ class JBAVerificationSystem:
             logger.error(f"❌ メンバー取得エラー: {str(e)}", exc_info=True)
             return {"team_name": "Error", "members": []}
     
-    def get_player_details(self, detail_url):
-        """選手詳細ページから身長・体重などの詳細情報を取得"""
+    def get_player_details(self, detail_url, fields=None):
+        """
+        選手詳細ページから必要最小限の情報のみ取得
+        
+        Args:
+            detail_url: 選手詳細ページのURL
+            fields: 取得するフィールドのリスト（Noneの場合は全て取得）
+                   例: ['height', 'weight', 'grade'] または None（全て）
+        """
         try:
             if not detail_url:
                 return {}
-            
-            # 選手詳細情報を取得中
             
             # 選手詳細ページにアクセス
             detail_page = self.session.get(detail_url)
             
             if detail_page.status_code != 200:
-                # 選手詳細ページにアクセスできません
                 return {}
             
             soup = BeautifulSoup(detail_page.content, 'html.parser')
@@ -542,19 +546,26 @@ class JBAVerificationSystem:
             # 選手詳細情報を抽出
             player_details = {}
             
-            # 身長・体重情報を探す
-            # 一般的なパターンを試す
+            # 🚀 パフォーマンス改善3: 必要最小限のフィールドのみ処理
+            need_height = fields is None or 'height' in fields
+            need_weight = fields is None or 'weight' in fields
+            need_grade = fields is None or 'grade' in fields
+            need_position = fields is None or 'position' in fields
+            need_school = fields is None or 'school' in fields
+            need_uniform = fields is None or 'uniform_number' in fields
+            
+            # 身長・体重情報を探す（必要な場合のみ）
             height_patterns = [
                 r'身長[：:]\s*(\d+\.?\d*)\s*cm',
                 r'身長[：:]\s*(\d+\.?\d*)\s*センチ',
                 r'Height[：:]\s*(\d+\.?\d*)\s*cm'
-            ]
+            ] if need_height or need_weight else []
             
             weight_patterns = [
                 r'体重[：:]\s*(\d+\.?\d*)\s*kg',
                 r'体重[：:]\s*(\d+\.?\d*)\s*キロ',
                 r'Weight[：:]\s*(\d+\.?\d*)\s*kg'
-            ]
+            ] if need_weight else []
             
             # テーブルから情報を抽出
             tables = soup.find_all('table')
@@ -566,51 +577,49 @@ class JBAVerificationSystem:
                         label = cells[0].get_text(strip=True)
                         value = cells[1].get_text(strip=True)
                         
-                        # 身長情報（JBAの「身長（競技者用）」に対応）
-                        if '身長' in label or 'Height' in label:
-                            # 数値部分を抽出
+                        # 身長情報（必要な場合のみ）
+                        if need_height and ('身長' in label or 'Height' in label):
                             import re
                             height_match = re.search(r'(\d+\.?\d*)', value)
-                            if height_match and value.strip():  # 空でない場合のみ
+                            if height_match and value.strip():
                                 player_details['height'] = height_match.group(1)
                         
-                        # 体重情報（JBAの「体重（競技者用）」に対応）
-                        elif '体重' in label or 'Weight' in label:
-                            # 数値部分を抽出
+                        # 体重情報（必要な場合のみ）
+                        elif need_weight and ('体重' in label or 'Weight' in label):
                             import re
                             weight_match = re.search(r'(\d+\.?\d*)', value)
-                            if weight_match and value.strip():  # 空でない場合のみ
+                            if weight_match and value.strip():
                                 player_details['weight'] = weight_match.group(1)
                         
-                        # ポジション情報
-                        elif 'ポジション' in label or 'Position' in label:
+                        # ポジション情報（必要な場合のみ）
+                        elif need_position and ('ポジション' in label or 'Position' in label):
                             player_details['position'] = value
                         
-                        # 出身校情報
-                        elif '出身校' in label or '出身' in label:
+                        # 出身校情報（必要な場合のみ）
+                        elif need_school and ('出身校' in label or '出身' in label):
                             player_details['school'] = value
                         
-                        # 学年情報
-                        elif '学年' in label or 'Grade' in label:
+                        # 学年情報（必要な場合のみ）
+                        elif need_grade and ('学年' in label or 'Grade' in label):
                             player_details['grade'] = value
                         
-                        # ユニフォーム番号
-                        elif 'ユニフォーム番号' in label or '背番号' in label:
+                        # ユニフォーム番号（必要な場合のみ）
+                        elif need_uniform and ('ユニフォーム番号' in label or '背番号' in label):
                             player_details['uniform_number'] = value
             
-            # テーブルで見つからない場合は、ページ全体から正規表現で検索
-            if 'height' not in player_details or 'weight' not in player_details:
+            # テーブルで見つからない場合は、ページ全体から正規表現で検索（必要な場合のみ）
+            if need_height and 'height' not in player_details:
                 page_text = soup.get_text()
-                
-                # 身長を検索
                 for pattern in height_patterns:
                     import re
                     match = re.search(pattern, page_text)
                     if match:
                         player_details['height'] = match.group(1)
                         break
-                
-                # 体重を検索
+            
+            if need_weight and 'weight' not in player_details:
+                if 'page_text' not in locals():
+                    page_text = soup.get_text()
                 for pattern in weight_patterns:
                     import re
                     match = re.search(pattern, page_text)
@@ -758,16 +767,21 @@ class JBAVerificationSystem:
                             # 名前の類似度チェック
                             name_similarity = self.calculate_similarity(player_name, member.get("name", ""))
 
-                            # 🚀 パフォーマンス改善: デバッグ情報を削減（マッチした場合のみ）
-                            if name_similarity >= 0.6:
-                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 類似度: {name_similarity:.3f}")
-
                             # 名前類似度が0.6以上ならJBA登録あり（〇）として扱う
                             if name_similarity >= 0.6:
-                                # 詳細情報を取得する場合
+                                # 🚀 パフォーマンス改善: デバッグ情報（マッチした場合のみ）
+                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 類似度: {name_similarity:.3f}")
+                                
+                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合（必要最小限のフィールドのみ）
                                 if get_details and member.get("detail_url"):
                                     try:
-                                        player_details = self.get_player_details(member["detail_url"])
+                                        # 背番号がある場合は身長・体重・学年を取得、ない場合は学年のみ取得
+                                        if player_no:
+                                            fields = ['height', 'weight', 'grade']  # 背番号がある場合
+                                        else:
+                                            fields = ['grade']  # 背番号がない場合（学年のみ）
+                                        
+                                        player_details = self.get_player_details(member["detail_url"], fields=fields)
                                         member.update(player_details)
                                     except Exception as detail_error:
                                         logger.error(f"❌ 選手詳細取得エラー: {detail_error}")

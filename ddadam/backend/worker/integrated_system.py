@@ -190,11 +190,16 @@ class IntegratedTournamentSystem:
         print(f"📝 使用フォント: {self.default_font}")
     
     def _truncate_text(self, text, max_chars=15):
-        """テキストを指定文字数で切り詰め"""
+        """テキストを指定文字数で切り詰め（HTMLタグを含む場合はそのまま返す）"""
         if not isinstance(text, str):
             text = str(text)
         if pd.isna(text) or text == 'nan':
             return ""
+        
+        # HTMLタグを含む場合はそのまま返す（タグが壊れるのを防ぐ）
+        if '<font' in text or '<b>' in text or '<i>' in text or '<u>' in text:
+            return text
+        
         # 改行文字を除去
         text = text.replace('\n', ' ').replace('\r', ' ')
         # 長すぎる場合は切り詰め
@@ -642,34 +647,49 @@ class IntegratedTournamentSystem:
         
         logger.info(f"🚀 処理開始: {len(universities)} 大学, {total_players} 選手")
         
-        # 🚀 パフォーマンス改善: 大学ごとに処理（チーム情報を1回だけ取得）
-        for i, univ in enumerate(universities):
-            logger.info(f"🏫 [{i+1}/{len(universities)}] {univ} を処理中...")
+        # 🚀 パフォーマンス改善2: 大学間の並列処理（適度な並列度で）
+        def process_single_university(univ):
+            """単一大学の処理（並列化用）"""
+            try:
+                logger.info(f"🏫 {univ} を処理中...")
+                
+                # この大学の選手を抽出
+                if '大学名' in df.columns:
+                    univ_data = df[df['大学名'] == univ].copy()
+                else:
+                    univ_data = df.copy()
+                
+                # ★ この大学のチーム情報を1回だけ事前取得（リアルタイム性を保つ）
+                logger.info(f"📥 {univ} のチーム情報を取得中（リアルタイム）...")
+                preload_start = time.time()
+                self._preload_university_teams(univ)
+                preload_elapsed = time.time() - preload_start
+                logger.info(f"✅ {univ} のチーム取得完了: {preload_elapsed:.2f}秒")
+                
+                # ★ この大学の選手を並列処理（チーム情報はキャッシュから取得）
+                logger.info(f"⚡ {univ} の {len(univ_data)} 名を処理中...")
+                univ_results = self._process_university_players_parallel(univ_data, univ)
+                
+                logger.info(f"✅ {univ} 完了: {len(univ_results)} 名処理")
+                return univ_results
+            except Exception as e:
+                logger.error(f"❌ {univ} の処理でエラー: {e}", exc_info=True)
+                return []
+        
+        # 大学間を並列処理（適度な並列度で、レート制限対策）
+        # 大学数が多い場合は並列度を制限（最大5大学まで同時処理）
+        max_univ_workers = min(self.max_workers, len(universities), 5)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_univ_workers) as executor:
+            futures = {executor.submit(process_single_university, univ): univ for univ in universities}
             
-            # この大学の選手を抽出
-            if '大学名' in df.columns:
-                univ_data = df[df['大学名'] == univ].copy()
-            else:
-                univ_data = df.copy()
-            
-            # ★ この大学のチーム情報を1回だけ事前取得（リアルタイム性を保つ）
-            logger.info(f"📥 {univ} のチーム情報を取得中（リアルタイム）...")
-            preload_start = time.time()
-            self._preload_university_teams(univ)
-            preload_elapsed = time.time() - preload_start
-            logger.info(f"✅ {univ} のチーム取得完了: {preload_elapsed:.2f}秒")
-            
-            # ★ この大学の選手を並列処理（チーム情報はキャッシュから取得）
-            logger.info(f"⚡ {univ} の {len(univ_data)} 名を処理中...")
-            univ_results = self._process_university_players_parallel(univ_data, univ)
-            
-            all_results.extend(univ_results)
-            logger.info(f"✅ {univ} 完了: {len(univ_results)} 名処理")
-            
-            # 🚀 レート制限対策: 大学間のクールダウン（最後の大学以外）
-            if i < len(universities) - 1:
-                cooldown = random.uniform(0.2, 0.5)  # 0.2-0.5秒のランダムクールダウン
-                time.sleep(cooldown)
+            for future in concurrent.futures.as_completed(futures):
+                univ = futures[future]
+                try:
+                    univ_results = future.result()
+                    all_results.extend(univ_results)
+                except Exception as e:
+                    logger.error(f"❌ {univ} の処理で例外: {e}", exc_info=True)
         
         elapsed_time = time.time() - start_time
         self.performance_stats['total_time'] = elapsed_time
@@ -689,8 +709,9 @@ class IntegratedTournamentSystem:
         return all_results
     
     def _preload_university_teams(self, university_name):
-        """大学のチーム情報を事前に1回だけ取得（リアルタイム性を保つ）"""
+        """大学のチーム情報とメンバー情報を事前に1回だけ取得（リアルタイム性を保つ）"""
         import logging
+        import concurrent.futures
         logger = logging.getLogger(__name__)
         
         # 検索名を取得
@@ -703,7 +724,16 @@ class IntegratedTournamentSystem:
         # キャッシュに既にある場合はスキップ
         if search_name in self.jba_system.teams_cache:
             logger.debug(f"💾 {university_name} のチーム情報は既にキャッシュにあります")
-            return
+            # メンバー情報も既に取得済みか確認
+            teams = self.jba_system.teams_cache[search_name]
+            all_cached = True
+            for team in teams:
+                if team['url'] not in self.jba_system.team_members_cache:
+                    all_cached = False
+                    break
+            if all_cached:
+                logger.debug(f"💾 {university_name} のメンバー情報も既にキャッシュにあります")
+                return
         
         # チーム情報を取得（1回だけ）
         try:
@@ -711,6 +741,30 @@ class IntegratedTournamentSystem:
             # キャッシュに保存
             self.jba_system.teams_cache[search_name] = teams
             logger.debug(f"✅ {university_name} のチーム情報を取得: {len(teams)} チーム")
+            
+            # 🚀 パフォーマンス改善1: メンバー情報も事前取得（並列化）
+            if teams:
+                logger.debug(f"📥 {university_name} のメンバー情報を事前取得中...")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(teams), 5)) as executor:
+                    futures = []
+                    for team in teams:
+                        # 既にキャッシュにある場合はスキップ
+                        if team['url'] not in self.jba_system.team_members_cache:
+                            future = executor.submit(
+                                self.jba_system._get_team_members_silent, 
+                                team['url']
+                            )
+                            futures.append((future, team['url']))
+                    
+                    # 結果をキャッシュに保存
+                    for future, team_url in futures:
+                        try:
+                            team_data = future.result()
+                            self.jba_system.team_members_cache[team_url] = team_data
+                        except Exception as e:
+                            logger.error(f"❌ メンバー情報取得エラー ({team_url}): {e}")
+                
+                logger.debug(f"✅ {university_name} のメンバー情報を事前取得完了")
         except Exception as e:
             logger.error(f"❌ {university_name} のチーム検索エラー: {e}")
     
