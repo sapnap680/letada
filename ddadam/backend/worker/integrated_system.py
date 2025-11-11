@@ -794,7 +794,7 @@ class IntegratedTournamentSystem:
                     
                     # 大学名を追加（既に追加済みの場合はスキップ）
                     if '大学名' not in df.columns:
-                    df['大学名'] = university_name
+                        df['大学名'] = university_name
                     
                     all_universities_data.append(df)
                     print(f"  ✅ {university_name} 取得成功: {len(df)} 行")
