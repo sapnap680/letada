@@ -1615,14 +1615,6 @@ class IntegratedTournamentSystem:
                     d = r["original_data"]
                     status = r.get("status", "unknown")
                     
-                    # ステータス記号（〇 or ×）
-                    if status == "match":
-                        status_symbol = "〇"
-                    elif status == "not_found":
-                        status_symbol = "×"
-                    else:
-                        status_symbol = "-"
-                    
                     # データ行を作成（画像の列構成に準拠）
                     # 変更されたデータを赤字で表示
                     no = d.get("No", d.get("背番号", ""))
@@ -1650,6 +1642,9 @@ class IntegratedTournamentSystem:
                     player_name = clean_value(player_name)
                     kana_name = clean_value(kana_name)
                     department = clean_value(department)
+                    # 学年の元の値を保持（clean_value処理前のCSVの元の値）
+                    original_grade_raw = d.get("学年", "")
+                    original_grade = str(original_grade_raw).strip() if original_grade_raw is not None else ""
                     grade = clean_value(grade)
                     height = clean_value(height)
                     weight = clean_value(weight)
@@ -1675,8 +1670,7 @@ class IntegratedTournamentSystem:
                     height = truncate_decimal(height)
                     weight = truncate_decimal(weight)
                     
-                    # 学年の元の値を保持（一桁チェック用）
-                    original_grade = grade
+                    # 学年の処理（一桁チェック用）
                     grade_truncated = truncate_decimal(grade)
                     
                     # 学年が一桁（1-9）かどうかをチェック
@@ -1696,15 +1690,47 @@ class IntegratedTournamentSystem:
                     else:
                         grade = grade_truncated
                     
-                    # 学年が一桁でない場合は、JBAステータスを△にする
-                    # 学年が存在し、かつ一桁（1-9）でない場合
-                    if grade:
-                        # 学年の数値部分を抽出してチェック
-                        grade_num_match = re.search(r'(\d+)', str(grade))
-                        if grade_num_match:
-                            grade_num = int(grade_num_match.group(1))
-                            if not (1 <= grade_num <= 9):
+                    # ステータス記号の設定（学年チェックを優先）
+                    # JBA照合で取得した学年が一桁でない場合は、JBAステータスを△にする（最優先）
+                    # まずJBA照合結果から学年を取得してチェック
+                    jba_grade = None
+                    verification_result = r.get("verification_result", {})
+                    if verification_result and verification_result.get("status") == "match":
+                        jba_data = verification_result.get("jba_data", {})
+                        if jba_data and "grade" in jba_data and jba_data["grade"]:
+                            jba_grade = str(jba_data["grade"]).strip()
+                    
+                    # JBA照合で取得した学年が一桁でない場合は△にする
+                    if jba_grade:
+                        jba_grade_num_match = re.search(r'(\d+)', jba_grade)
+                        if jba_grade_num_match:
+                            jba_grade_num = int(jba_grade_num_match.group(1))
+                            if not (1 <= jba_grade_num <= 9):
                                 status_symbol = "△"
+                            else:
+                                # JBA学年が一桁の場合は、JBAの照合結果に基づいて設定
+                                if status == "match":
+                                    status_symbol = "〇"
+                                elif status == "not_found":
+                                    status_symbol = "×"
+                                else:
+                                    status_symbol = "-"
+                        else:
+                            # JBA学年に数値が含まれていない場合もJBAの照合結果に基づいて設定
+                            if status == "match":
+                                status_symbol = "〇"
+                            elif status == "not_found":
+                                status_symbol = "×"
+                            else:
+                                status_symbol = "-"
+                    else:
+                        # JBA学年が取得できない場合は、JBAの照合結果に基づいて設定
+                        if status == "match":
+                            status_symbol = "〇"
+                        elif status == "not_found":
+                            status_symbol = "×"
+                        else:
+                            status_symbol = "-"
                     
                     # 変更があった場合は赤字で表示（changed_fieldsを使用）
                     if r.get("correction"):
@@ -1729,8 +1755,8 @@ class IntegratedTournamentSystem:
                             # 修正された学年が一桁かどうかをチェック
                             corrected_grade_truncated = truncate_decimal(corrected_grade)
                             if corrected_grade_truncated and not is_single_digit_grade(corrected_grade_truncated):
-                                # 一桁でない場合は元の値をそのまま使用
-                                grade = f'<font color="red">{corrected_grade}</font>' if corrected_grade else ""
+                                # 一桁でない場合はCSVの元の値をそのまま使用（修正値ではなく）
+                                grade = f'<font color="red">{original_grade}</font>' if original_grade else ""
                             else:
                                 # 一桁の場合は切り捨てた値を使用
                                 grade = f'<font color="red">{corrected_grade_truncated}</font>' if corrected_grade_truncated else ""
