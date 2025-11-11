@@ -1729,16 +1729,54 @@ class IntegratedTournamentSystem:
                         is_english = bool(re.match(r'^[A-Za-z\s\.\-\']+$', cell_clean)) if cell_clean else False
                         
                         # 英語の場合はHelvetica、日本語の場合は日本語フォント
+                        # サイズ感と左揃えは日本語と同じにする
                         if is_english:
-                            # 英語用スタイル（Helvetica）
-                            english_style = ParagraphStyle(
-                                'EnglishStyle',
-                                parent=styles['Normal'],
-                                fontSize=small_compact_style.fontSize if i in [1, 2] else compact_style.fontSize,
-                                leading=small_compact_style.leading if i in [1, 2] else compact_style.leading,
-                                fontName='Helvetica',
-                                alignment=1  # CENTER
-                            )
+                            # 英語用スタイル（Helvetica、日本語と同じサイズ・左揃え）
+                            if i == 0:  # No(0)の列 - 選手名と同じサイズ
+                                english_style = ParagraphStyle(
+                                    'EnglishStyle0',
+                                    parent=styles['Normal'],
+                                    fontSize=small_compact_style.fontSize,
+                                    leading=small_compact_style.leading,
+                                    fontName='Helvetica',
+                                    alignment=0  # LEFT（日本語と同じ）
+                                )
+                            elif i in [1, 2]:  # 選手名(1)、カナ名(2)の列
+                                english_style = ParagraphStyle(
+                                    'EnglishStyle12',
+                                    parent=styles['Normal'],
+                                    fontSize=small_compact_style.fontSize,
+                                    leading=small_compact_style.leading,
+                                    fontName='Helvetica',
+                                    alignment=0  # LEFT（日本語と同じ）
+                                )
+                            elif i == 3:  # 学部(3)の列
+                                english_style = ParagraphStyle(
+                                    'EnglishStyle3',
+                                    parent=styles['Normal'],
+                                    fontSize=department_compact_style.fontSize,
+                                    leading=department_compact_style.leading,
+                                    fontName='Helvetica',
+                                    alignment=0  # LEFT（日本語と同じ）
+                                )
+                            elif i == 8:  # 出身校(8)の列
+                                english_style = ParagraphStyle(
+                                    'EnglishStyle8',
+                                    parent=styles['Normal'],
+                                    fontSize=extra_small_compact_style.fontSize,
+                                    leading=extra_small_compact_style.leading,
+                                    fontName='Helvetica',
+                                    alignment=0  # LEFT（日本語と同じ）
+                                )
+                            else:
+                                english_style = ParagraphStyle(
+                                    'EnglishStyleOther',
+                                    parent=styles['Normal'],
+                                    fontSize=compact_style.fontSize,
+                                    leading=compact_style.leading,
+                                    fontName='Helvetica',
+                                    alignment=0  # LEFT（日本語と同じ）
+                                )
                             formatted_row_data.append(Paragraph(cell_str, english_style))
                         else:
                             # 日本語用スタイル（既存のスタイルを使用）
