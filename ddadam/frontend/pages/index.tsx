@@ -118,7 +118,7 @@ export default function Home() {
             {error && (
               <div className="mb-36 p-36 bg-red-50 border-[1.5rem] border-red-300 rounded-[4.5rem]">
                 <div className="flex items-center">
-                  <span className="mr-18 text-[11.25rem]">❌</span>
+                  <span className="mr-[4.5rem] text-[11.25rem]">❌</span>
                   <span className="text-red-800 text-[9rem] font-bold">{error}</span>
                 </div>
               </div>
@@ -131,7 +131,7 @@ export default function Home() {
               className={`w-full py-[540px] px-96 rounded-[4.5rem] font-black text-white text-[18rem] transition-all transform shadow-2xl border-[1.5rem] ${
                 loading
                   ? "bg-gray-400 border-gray-500 cursor-not-allowed"
-                  : "bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 border-white/50 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 active:from-blue-700 active:via-purple-700 active:to-pink-700 hover:scale-[1.02] active:scale-[0.98] hover:shadow-3xl"
+                  : "bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 border-white/50 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 active:from-blue-700 active:via-purple-700 active:to-pink-700 hover:scale-[1.02] active:scale-[0.98] hover:shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]"
               }`}
             >
               {loading ? (
@@ -160,7 +160,7 @@ export default function Home() {
                 </span>
               ) : (
                 <span className="flex items-center justify-center">
-                  <span className="mr-18 text-[24rem]">🚀</span>
+                  <span className="mr-[4.5rem] text-[24rem]">🚀</span>
                   <span>大会CSVを取得して照合開始</span>
                 </span>
               )}
