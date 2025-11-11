@@ -65,7 +65,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-indigo-600">
+    <main className="min-h-screen" style={{ backgroundColor: '#4f46e5' }}>
       <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-3xl">
           {/* ヘッダー */}
@@ -128,10 +128,17 @@ export default function Home() {
             <button
               onClick={handleStart}
               disabled={loading}
-              className={`w-full py-20 px-12 rounded-2xl font-black text-white text-5xl transition-all transform shadow-xl ${
+              style={loading ? {} : {
+                background: 'linear-gradient(to right, #facc15, #f97316, #ef4444)',
+                paddingTop: '5rem',
+                paddingBottom: '5rem',
+                paddingLeft: '3rem',
+                paddingRight: '3rem',
+              }}
+              className={`w-full rounded-2xl font-black text-white text-5xl transition-all transform shadow-xl ${
                 loading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 active:from-yellow-500 active:via-orange-600 active:to-red-600 hover:scale-105 active:scale-95 hover:shadow-2xl"
+                  ? "bg-gray-400 cursor-not-allowed py-20 px-12"
+                  : "hover:scale-105 active:scale-95 hover:shadow-2xl"
               }`}
             >
               {loading ? (
