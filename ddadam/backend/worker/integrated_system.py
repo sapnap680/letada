@@ -1684,9 +1684,21 @@ class IntegratedTournamentSystem:
                         except (ValueError, TypeError):
                             return False
                     
-                    # 学年が一桁でない場合は、CSVの元の値をそのまま使用
+                    # 学年が一桁でない場合は、CSVの元の値から小数点を削除して使用
                     if grade_truncated and not is_single_digit_grade(grade_truncated):
-                        grade = original_grade  # 元のCSVの値をそのまま使用
+                        # 元のCSVの値から小数点を削除（数値部分のみ抽出）
+                        original_grade_clean = original_grade
+                        if original_grade:
+                            # 数値部分を抽出（小数点を含む）
+                            grade_num_match = re.search(r'(\d+(?:\.\d+)?)', str(original_grade))
+                            if grade_num_match:
+                                # 小数点以下を削除して整数のみ表示
+                                try:
+                                    grade_num = int(float(grade_num_match.group(1)))
+                                    original_grade_clean = str(grade_num)
+                                except (ValueError, TypeError):
+                                    original_grade_clean = original_grade
+                        grade = original_grade_clean  # 元のCSVの値から小数点を削除した値を使用
                     else:
                         grade = grade_truncated
                     
@@ -1698,7 +1710,10 @@ class IntegratedTournamentSystem:
                     if verification_result and verification_result.get("status") == "match":
                         jba_data = verification_result.get("jba_data", {})
                         if jba_data and "grade" in jba_data and jba_data["grade"]:
-                            jba_grade = str(jba_data["grade"]).strip()
+                            jba_grade_str = str(jba_data["grade"]).strip()
+                            # 空文字列や"None"などの無効な値を除外
+                            if jba_grade_str and jba_grade_str.lower() not in ['', 'none', 'null', 'nan']:
+                                jba_grade = jba_grade_str
                     
                     # JBA照合で取得した学年が一桁でない場合は△にする
                     if jba_grade:
@@ -1724,7 +1739,7 @@ class IntegratedTournamentSystem:
                             else:
                                 status_symbol = "-"
                     else:
-                        # JBA学年が取得できない場合は、JBAの照合結果に基づいて設定
+                        # JBA学年が取得できない場合は、JBAの照合結果に基づいて設定（従来通り）
                         if status == "match":
                             status_symbol = "〇"
                         elif status == "not_found":
@@ -1755,10 +1770,23 @@ class IntegratedTournamentSystem:
                             # 修正された学年が一桁かどうかをチェック
                             corrected_grade_truncated = truncate_decimal(corrected_grade)
                             if corrected_grade_truncated and not is_single_digit_grade(corrected_grade_truncated):
-                                # 一桁でない場合はCSVの元の値をそのまま使用（修正値ではなく）
-                                grade = f'<font color="red">{original_grade}</font>' if original_grade else ""
+                                # 一桁でない場合はCSVの元の値から小数点を削除して使用（赤字表示しない、変更扱いも解除）
+                                original_grade_clean = original_grade
+                                if original_grade:
+                                    # 数値部分を抽出（小数点を含む）
+                                    grade_num_match = re.search(r'(\d+(?:\.\d+)?)', str(original_grade))
+                                    if grade_num_match:
+                                        # 小数点以下を削除して整数のみ表示
+                                        try:
+                                            grade_num = int(float(grade_num_match.group(1)))
+                                            original_grade_clean = str(grade_num)
+                                        except (ValueError, TypeError):
+                                            original_grade_clean = original_grade
+                                grade = original_grade_clean if original_grade_clean else ""
+                                # 一桁でない場合は変更扱いを解除（changed_fieldsから削除）
+                                changed_fields.discard('学年')
                             else:
-                                # 一桁の場合は切り捨てた値を使用
+                                # 一桁の場合は切り捨てた値を使用（赤字表示）
                                 grade = f'<font color="red">{corrected_grade_truncated}</font>' if corrected_grade_truncated else ""
                         
                         # 身長が変更された場合のみ赤字で表示
