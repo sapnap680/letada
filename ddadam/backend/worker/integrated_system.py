@@ -1646,7 +1646,37 @@ class IntegratedTournamentSystem:
                     
                     height = truncate_decimal(height)
                     weight = truncate_decimal(weight)
-                    grade = truncate_decimal(grade)
+                    
+                    # 学年の元の値を保持（一桁チェック用）
+                    original_grade = grade
+                    grade_truncated = truncate_decimal(grade)
+                    
+                    # 学年が一桁（1-9）かどうかをチェック
+                    def is_single_digit_grade(grade_str):
+                        """学年が一桁の数字（1-9）かどうかを判定"""
+                        if not grade_str:
+                            return False
+                        try:
+                            num = int(grade_str)
+                            return 1 <= num <= 9
+                        except (ValueError, TypeError):
+                            return False
+                    
+                    # 学年が一桁でない場合は、CSVの元の値をそのまま使用
+                    if grade_truncated and not is_single_digit_grade(grade_truncated):
+                        grade = original_grade  # 元のCSVの値をそのまま使用
+                    else:
+                        grade = grade_truncated
+                    
+                    # 学年が一桁でない場合は、JBAステータスを△にする
+                    # 学年が存在し、かつ一桁（1-9）でない場合
+                    if grade:
+                        # 学年の数値部分を抽出してチェック
+                        grade_num_match = re.search(r'(\d+)', str(grade))
+                        if grade_num_match:
+                            grade_num = int(grade_num_match.group(1))
+                            if not (1 <= grade_num <= 9):
+                                status_symbol = "△"
                     
                     # 変更があった場合は赤字で表示（changed_fieldsを使用）
                     if r.get("correction"):
@@ -1668,9 +1698,14 @@ class IntegratedTournamentSystem:
                         # 学年が変更された場合のみ赤字で表示
                         if '学年' in changed_fields:
                             corrected_grade = corrected_data.get("学年", grade)
-                            # 修正された学年も小数点以下を切り捨て
-                            corrected_grade = truncate_decimal(corrected_grade)
-                            grade = f'<font color="red">{corrected_grade}</font>' if corrected_grade else ""
+                            # 修正された学年が一桁かどうかをチェック
+                            corrected_grade_truncated = truncate_decimal(corrected_grade)
+                            if corrected_grade_truncated and not is_single_digit_grade(corrected_grade_truncated):
+                                # 一桁でない場合は元の値をそのまま使用
+                                grade = f'<font color="red">{corrected_grade}</font>' if corrected_grade else ""
+                            else:
+                                # 一桁の場合は切り捨てた値を使用
+                                grade = f'<font color="red">{corrected_grade_truncated}</font>' if corrected_grade_truncated else ""
                         
                         # 身長が変更された場合のみ赤字で表示
                         if '身長' in changed_fields:
@@ -1696,7 +1731,13 @@ class IntegratedTournamentSystem:
                         # HTMLタグを除去してから判定
                         import re
                         text_clean = re.sub(r'<[^>]+>', '', text)
-                        return bool(re.match(r'^[A-Za-z\s\.\-\']+$', text_clean))
+                        # 引用符（"）やその他の記号も含めて判定、日本語文字（ひらがな、カタカナ、漢字）が含まれていないかチェック
+                        # 日本語文字が含まれていなければ英語として扱う
+                        has_japanese = bool(re.search(r'[ひらがなカタカナ漢字一-龯]', text_clean))
+                        if has_japanese:
+                            return False
+                        # アルファベット、スペース、ピリオド、ハイフン、アポストロフィ、引用符が含まれているか
+                        return bool(re.match(r'^[A-Za-z\s\.\-\'"]+$', text_clean))
                     
                     # 英語名の場合は文字数を倍にする
                     player_name_max = 40 if is_english_name(player_name) else 20
@@ -1727,7 +1768,9 @@ class IntegratedTournamentSystem:
                         # 英語名かどうかを判定（HTMLタグを除去）
                         import re
                         cell_clean = re.sub(r'<[^>]+>', '', cell_str)
-                        is_english = bool(re.match(r'^[A-Za-z\s\.\-\']+$', cell_clean)) if cell_clean else False
+                        # 日本語文字が含まれていなければ英語として扱う
+                        has_japanese = bool(re.search(r'[ひらがなカタカナ漢字一-龯]', cell_clean)) if cell_clean else False
+                        is_english = not has_japanese and bool(re.match(r'^[A-Za-z\s\.\-\'"]+$', cell_clean)) if cell_clean else False
                         
                         # 英語の場合はHelvetica、日本語の場合は日本語フォント
                         # サイズ感と左揃えは日本語と同じにする
