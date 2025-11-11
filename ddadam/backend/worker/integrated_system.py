@@ -945,7 +945,7 @@ class IntegratedTournamentSystem:
                                     pass
                             
                             # 体重の照合（5kg以上差があったらJBAの値に変更）
-                        if 'weight' in jba_data and jba_data['weight']:
+                            if 'weight' in jba_data and jba_data['weight']:
                                 try:
                                     jba_weight_str = str(jba_data['weight']).replace('kg', '').strip()
                                     # 値が空、0.0、nanの場合は空欄のまま
@@ -958,7 +958,7 @@ class IntegratedTournamentSystem:
                                             if weight_diff >= 5.0:
                                                 corrected_data['体重'] = f"{jba_weight}kg"
                                                 changed_fields.add('体重')
-                            else:
+                                        else:
                                             # CSVに体重がない場合はJBAの値を使用
                                             corrected_data['体重'] = f"{jba_weight}kg"
                                             changed_fields.add('体重')
