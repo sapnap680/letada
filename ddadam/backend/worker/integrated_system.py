@@ -958,7 +958,7 @@ class IntegratedTournamentSystem:
                                             if weight_diff >= 5.0:
                                                 corrected_data['体重'] = f"{jba_weight}kg"
                                                 changed_fields.add('体重')
-                            else:
+                                        else:
                                             # CSVに体重がない場合はJBAの値を使用
                                             corrected_data['体重'] = f"{jba_weight}kg"
                                             changed_fields.add('体重')
