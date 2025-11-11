@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]  # TODO: 本番では制限すること
     
     # ログ設定
-    log_level: str = "DEBUG"  # INFO → DEBUG に変更（詳細ログ出力）
+    log_level: str = "INFO"
     log_format: str = "json"  # "json" or "text"
     
     # 機能フラグ
