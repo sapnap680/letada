@@ -101,26 +101,26 @@ export default function Result() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
-      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 lg:p-12">
-        <div className="w-full max-w-5xl">
+    <main className="min-h-screen" style={{ backgroundColor: '#4f46e5' }}>
+      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
+        <div className="w-full max-w-3xl">
           {/* ヘッダー */}
-          <div className="text-center mb-8 sm:mb-10 lg:mb-12">
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+          <div className="text-center mb-16">
+            <h1 className="text-6xl sm:text-7xl font-black mb-6 text-white tracking-tight">
               処理状況
             </h1>
-            <p className="text-slate-300 text-lg sm:text-xl">
-              ジョブID: <code className="bg-slate-800/50 px-4 py-2 rounded-lg text-purple-300 font-mono text-base sm:text-lg">{jobId}</code>
+            <p className="text-white text-xl">
+              ジョブID: <code className="bg-white/20 px-4 py-2 rounded-lg text-white font-mono text-lg">{jobId}</code>
             </p>
           </div>
 
           {/* メインカード */}
-          <div className="bg-slate-800/50 backdrop-blur-lg rounded-2xl shadow-2xl border border-slate-700/50 p-8 sm:p-10 lg:p-12">
+          <div className="rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100" style={{ backgroundColor: '#4f46e5' }}>
             {error && (
-              <div className="mb-6 p-6 bg-red-900/30 border-2 border-red-500/50 rounded-xl text-red-200 backdrop-blur-sm">
+              <div className="mb-8 p-6 bg-red-100 border-4 border-red-400 rounded-2xl">
                 <div className="flex items-center">
-                  <span className="mr-3 text-3xl">❌</span>
-                  <span className="text-xl font-semibold">{error}</span>
+                  <span className="mr-3 text-4xl">❌</span>
+                  <span className="text-red-900 text-3xl font-bold">{error}</span>
                 </div>
               </div>
             )}
@@ -128,24 +128,24 @@ export default function Result() {
             {jobStatus && (
               <>
                 {/* ステータス表示 */}
-                <div className="mb-8 sm:mb-10 lg:mb-12">
-                  <div className="flex flex-col sm:flex-row items-center justify-between mb-6 sm:mb-8 gap-4 sm:gap-6">
-                    <div className="flex items-center space-x-4 sm:space-x-6">
-                      <span className="text-5xl sm:text-6xl lg:text-7xl">{getStatusIcon(jobStatus.status)}</span>
+                <div className="mb-10">
+                  <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
+                    <div className="flex items-center space-x-4">
+                      <span className="text-5xl">{getStatusIcon(jobStatus.status)}</span>
                       <div>
-                        <p className={`text-3xl sm:text-4xl lg:text-5xl font-bold ${getStatusColor(jobStatus.status)}`}>
+                        <p className={`text-3xl font-bold ${getStatusColor(jobStatus.status)}`}>
                           {jobStatus.status.toUpperCase()}
                         </p>
-                        <p className="text-base sm:text-lg text-slate-400 mt-2">
+                        <p className="text-base text-white/70 mt-1">
                           {jobStatus.updated_at && new Date(jobStatus.updated_at).toLocaleString("ja-JP")}
                         </p>
                       </div>
                     </div>
                     <div className="text-center sm:text-right">
-                      <p className="text-6xl sm:text-7xl lg:text-8xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                      <p className="text-7xl font-bold text-white">
                         {Math.round(jobStatus.progress * 100)}%
                       </p>
-                      <p className="text-xl sm:text-2xl text-slate-400 mt-2">進捗</p>
+                      <p className="text-lg text-white/70 mt-1">進捗</p>
                     </div>
                   </div>
 
@@ -153,9 +153,9 @@ export default function Result() {
                   <div 
                     className="w-full rounded-full overflow-hidden shadow-2xl border-4 relative"
                     style={{
-                      backgroundColor: 'rgba(51, 65, 85, 0.5)',
-                      height: '4rem',
-                      borderColor: 'rgba(71, 85, 105, 0.5)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                      height: '3rem',
+                      borderColor: 'rgba(255, 255, 255, 0.3)',
                     }}
                   >
                     {/* 背景のアニメーション効果 */}
@@ -170,15 +170,15 @@ export default function Result() {
                           ? 'linear-gradient(to right, #10b981, #34d399, #10b981)'
                           : jobStatus.status === "error"
                           ? 'linear-gradient(to right, #ef4444, #fb7185, #ef4444)'
-                          : 'linear-gradient(to right, #3b82f6, #a855f7, #3b82f6)',
-                        paddingRight: '1.5rem',
+                          : 'linear-gradient(to right, #facc15, #f97316, #ef4444)',
+                        paddingRight: '1rem',
                         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
                       }}
                     >
                       {jobStatus.progress > 0.05 && (
                         <span 
                           className="text-white font-black drop-shadow-lg"
-                          style={{ fontSize: '1.5rem' }}
+                          style={{ fontSize: '1.25rem' }}
                         >
                           {Math.round(jobStatus.progress * 100)}%
                         </span>
@@ -188,8 +188,8 @@ export default function Result() {
                     {jobStatus.progress <= 0.05 && (
                       <div className="absolute inset-0 flex items-center justify-center z-20">
                         <span 
-                          className="text-slate-200 font-bold"
-                          style={{ fontSize: '1.5rem' }}
+                          className="text-white font-bold"
+                          style={{ fontSize: '1.25rem' }}
                         >
                           {Math.round(jobStatus.progress * 100)}%
                         </span>
@@ -198,16 +198,16 @@ export default function Result() {
                   </div>
 
                   {/* メッセージ */}
-                  <p className="mt-6 sm:mt-8 lg:mt-10 text-slate-200 text-center text-xl sm:text-2xl lg:text-3xl font-semibold">
+                  <p className="mt-6 text-white text-center text-xl font-semibold">
                     {jobStatus.message}
                   </p>
                 </div>
 
                 {/* 完了時のダウンロードボタン */}
                 {jobStatus.status === "done" && jobStatus.output_path && (
-                  <div className="p-6 sm:p-8 lg:p-10 bg-gradient-to-br from-green-900/30 to-emerald-900/30 border-2 border-green-500/50 rounded-xl backdrop-blur-sm">
-                    <h3 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-green-300 mb-6 sm:mb-8 flex items-center">
-                      <span className="mr-3 sm:mr-4 text-4xl sm:text-5xl">🎉</span>
+                  <div className="p-8 bg-white/10 border-2 border-white/20 rounded-2xl">
+                    <h3 className="text-3xl font-semibold text-white mb-6 flex items-center">
+                      <span className="mr-3 text-4xl">🎉</span>
                       処理が完了しました！
                     </h3>
                     <a
@@ -218,35 +218,42 @@ export default function Result() {
                       }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-block bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 text-white font-black py-16 sm:py-20 lg:py-24 px-20 sm:px-24 lg:px-28 rounded-2xl shadow-2xl hover:shadow-yellow-500/50 transition-all transform hover:scale-105 active:scale-95 text-4xl sm:text-5xl lg:text-6xl border-4 border-yellow-300"
+                      style={{
+                        background: 'linear-gradient(to right, #facc15, #f97316, #ef4444)',
+                        paddingTop: '5rem',
+                        paddingBottom: '5rem',
+                        paddingLeft: '3rem',
+                        paddingRight: '3rem',
+                      }}
+                      className="inline-block text-white font-black rounded-2xl shadow-2xl hover:shadow-yellow-500/50 transition-all transform hover:scale-105 active:scale-95 text-5xl border-4 border-yellow-300"
                     >
                       <span className="flex items-center">
-                        <span className="mr-6 sm:mr-8 text-5xl sm:text-6xl lg:text-7xl">📥</span>
+                        <span className="mr-4 text-6xl">📥</span>
                         PDFをダウンロード
                       </span>
                     </a>
-                    <p className="mt-6 sm:mt-8 text-lg sm:text-xl text-slate-300">
-                      ファイル名: <code className="bg-slate-800/50 px-3 sm:px-4 py-2 rounded text-green-300 text-base sm:text-lg">{getFilename(jobStatus.output_path)}</code>
+                    <p className="mt-6 text-lg text-white/80">
+                      ファイル名: <code className="bg-white/20 px-3 py-2 rounded text-white text-base">{getFilename(jobStatus.output_path)}</code>
                     </p>
                   </div>
                 )}
 
                 {/* エラー時の表示 */}
                 {jobStatus.status === "error" && jobStatus.error && (
-                  <div className="p-6 sm:p-8 lg:p-10 bg-gradient-to-br from-red-900/30 to-rose-900/30 border-2 border-red-500/50 rounded-xl backdrop-blur-sm">
-                    <h3 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-red-300 mb-6 sm:mb-8 flex items-center">
-                      <span className="mr-3 sm:mr-4 text-4xl sm:text-5xl">❌</span>
+                  <div className="p-8 bg-red-100 border-4 border-red-400 rounded-2xl">
+                    <h3 className="text-3xl font-semibold text-red-900 mb-6 flex items-center">
+                      <span className="mr-3 text-4xl">❌</span>
                       エラーが発生しました
                     </h3>
-                    <div className="text-lg sm:text-xl text-red-200 mb-4 sm:mb-6">
+                    <div className="text-xl text-red-900 mb-4">
                       <strong>エラー:</strong> {jobStatus.error}
                     </div>
                     {(jobStatus as any).error_detail && (
-                      <details className="mt-4 sm:mt-6">
-                        <summary className="cursor-pointer text-red-300 font-semibold mb-2 sm:mb-4 hover:text-red-200 transition-colors text-lg sm:text-xl">
+                      <details className="mt-4">
+                        <summary className="cursor-pointer text-red-900 font-semibold mb-2 hover:text-red-700 transition-colors text-lg">
                           詳細を表示（開発者向け）
                         </summary>
-                        <pre className="text-sm sm:text-base text-red-200 whitespace-pre-wrap bg-slate-900/50 p-4 sm:p-6 rounded-lg overflow-auto max-h-96 border border-red-500/30 mt-2 sm:mt-4">
+                        <pre className="text-sm text-red-900 whitespace-pre-wrap bg-white/50 p-4 rounded-lg overflow-auto max-h-96 border border-red-400 mt-2">
                           {(jobStatus as any).error_detail}
                         </pre>
                       </details>
@@ -258,19 +265,19 @@ export default function Result() {
             )}
 
             {!jobStatus && !error && (
-              <div className="text-center py-12 sm:py-16 lg:py-20">
-                <div className="animate-spin rounded-full h-20 sm:h-24 lg:h-32 w-20 sm:w-24 lg:w-32 border-4 border-purple-500 border-t-transparent mx-auto mb-6 sm:mb-8"></div>
-                <p className="text-slate-300 text-xl sm:text-2xl lg:text-3xl">ジョブ情報を取得中...</p>
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mx-auto mb-4"></div>
+                <p className="text-white text-2xl">ジョブ情報を取得中...</p>
               </div>
             )}
 
             {/* 戻るボタン */}
-            <div className="mt-8 sm:mt-10 lg:mt-12 text-center">
+            <div className="mt-8 text-center">
               <button
                 onClick={() => router.push("/")}
-                className="text-purple-400 hover:text-purple-300 font-semibold transition-colors flex items-center justify-center mx-auto text-lg sm:text-xl lg:text-2xl"
+                className="text-white hover:text-white/80 font-semibold transition-colors flex items-center justify-center mx-auto text-xl"
               >
-                <span className="mr-2 sm:mr-3 text-2xl sm:text-3xl">←</span>
+                <span className="mr-2 text-2xl">←</span>
                 トップページに戻る
               </button>
             </div>
