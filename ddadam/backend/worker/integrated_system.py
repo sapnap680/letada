@@ -1566,7 +1566,8 @@ class IntegratedTournamentSystem:
                     fontSize=5,
                     leading=6,
                     fontName=getattr(self, 'default_font', 'MS-Gothic'),  # 日本語フォントを使用
-                    alignment=1  # CENTER
+                    alignment=1,  # CENTER
+                    textColor=colors.white  # フォント色を白に
                 )
                 header_row = [
                     Paragraph("No", header_style),

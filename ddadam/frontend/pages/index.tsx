@@ -69,17 +69,17 @@ export default function Home() {
       <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-3xl">
           {/* ヘッダー */}
-          <div className="text-center mb-16">
-            <h1 className="text-6xl sm:text-7xl font-black mb-6 text-white tracking-tight">
+          <div className="text-center mb-10">
+            <h1 className="text-4xl sm:text-5xl font-black mb-4 text-white tracking-tight">
               JBA照合システム
             </h1>
           </div>
 
           {/* フォームカード */}
-          <div className="rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100" style={{ backgroundColor: '#4f46e5' }}>
+          <div className="rounded-3xl shadow-2xl p-8 sm:p-10 border border-gray-100" style={{ backgroundColor: '#4f46e5' }}>
             {/* 大会ID入力 */}
-            <div className="mb-10">
-              <label className="block text-4xl font-bold mb-5 text-white">
+            <div className="mb-6">
+              <label className="block text-2xl font-bold mb-3 text-white">
                 大会ID
               </label>
               <input
@@ -88,56 +88,56 @@ export default function Home() {
                 value={gameId}
                 onChange={(e) => setGameId(e.target.value)}
                 style={{
-                  paddingTop: '5rem',
-                  paddingBottom: '5rem',
-                  paddingLeft: '3rem',
-                  paddingRight: '3rem',
+                  paddingTop: '3rem',
+                  paddingBottom: '3rem',
+                  paddingLeft: '2rem',
+                  paddingRight: '2rem',
                 }}
-                className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-5xl font-medium"
+                className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-3xl font-medium"
               />
             </div>
 
             {/* JBAログイン情報 */}
-            <div className="mb-10">
-              <label className="block text-4xl font-bold mb-5 text-white">
+            <div className="mb-6">
+              <label className="block text-2xl font-bold mb-3 text-white">
                 JBAログイン情報
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <input
                   type="email"
                   placeholder="JBAメールアドレス"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={{
-                    paddingTop: '5rem',
-                    paddingBottom: '5rem',
-                    paddingLeft: '3rem',
-                    paddingRight: '3rem',
+                    paddingTop: '3rem',
+                    paddingBottom: '3rem',
+                    paddingLeft: '2rem',
+                    paddingRight: '2rem',
                   }}
-                  className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-5xl font-medium"
+                  className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-3xl font-medium"
                 />
                 <input
-                  type="password"
+                  type="text"
                   placeholder="JBAパスワード"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   style={{
-                    paddingTop: '5rem',
-                    paddingBottom: '5rem',
-                    paddingLeft: '3rem',
-                    paddingRight: '3rem',
+                    paddingTop: '3rem',
+                    paddingBottom: '3rem',
+                    paddingLeft: '2rem',
+                    paddingRight: '2rem',
                   }}
-                  className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-5xl font-medium"
+                  className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-3xl font-medium"
                 />
               </div>
             </div>
 
             {/* エラー表示 */}
             {error && (
-              <div className="mb-8 p-6 bg-red-100 border-4 border-red-400 rounded-2xl">
+              <div className="mb-6 p-4 bg-red-100 border-4 border-red-400 rounded-2xl">
                 <div className="flex items-center">
-                  <span className="mr-3 text-4xl">❌</span>
-                  <span className="text-red-900 text-3xl font-bold">{error}</span>
+                  <span className="mr-3 text-2xl">❌</span>
+                  <span className="text-red-900 text-xl font-bold">{error}</span>
                 </div>
               </div>
             )}
@@ -148,21 +148,21 @@ export default function Home() {
               disabled={loading}
               style={loading ? {} : {
                 background: 'linear-gradient(to right, #facc15, #f97316, #ef4444)',
-                paddingTop: '5rem',
-                paddingBottom: '5rem',
-                paddingLeft: '3rem',
-                paddingRight: '3rem',
+                paddingTop: '3rem',
+                paddingBottom: '3rem',
+                paddingLeft: '2rem',
+                paddingRight: '2rem',
               }}
-              className={`w-full rounded-2xl font-black text-white text-5xl transition-all transform shadow-xl ${
+              className={`w-full rounded-2xl font-black text-white text-3xl transition-all transform shadow-xl ${
                 loading
-                  ? "bg-gray-400 cursor-not-allowed py-20 px-12"
+                  ? "bg-gray-400 cursor-not-allowed py-12 px-8"
                   : "hover:scale-105 active:scale-95 hover:shadow-2xl"
               }`}
             >
               {loading ? (
                 <span className="flex items-center justify-center">
                   <svg
-                    className="animate-spin -ml-1 mr-4 h-16 w-16 text-white"
+                    className="animate-spin -ml-1 mr-3 h-10 w-10 text-white"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -181,11 +181,11 @@ export default function Home() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  <span className="text-5xl">処理中...</span>
+                  <span className="text-3xl">処理中...</span>
                 </span>
               ) : (
                 <span className="flex items-center justify-center">
-                  <span className="mr-4 text-6xl">🚀</span>
+                  <span className="mr-3 text-4xl">🚀</span>
                   <span>大会CSVを取得して照合開始</span>
                 </span>
               )}
