@@ -757,7 +757,7 @@ class IntegratedTournamentSystem:
                                 text = td.get_text(strip=True)
                                 if "大学" in text and len(text) < 50:
                                     university_name = text
-                                        break
+                                    break
                             
                             if not university_name:
                                 university_name = f"大学_{i+1}"
