@@ -150,21 +150,35 @@ export default function Result() {
                   </div>
 
                   {/* プログレスバー */}
-                  <div className="w-full bg-slate-700/50 rounded-full h-12 overflow-hidden backdrop-blur-sm shadow-inner">
+                  <div className="w-full bg-slate-700/50 rounded-full h-16 overflow-hidden backdrop-blur-sm shadow-2xl border-2 border-slate-600/50 relative">
+                    {/* 背景のアニメーション効果 */}
+                    {(jobStatus.status === "processing" || jobStatus.status === "queued") && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer"></div>
+                    )}
                     <div
-                      className={`h-full transition-all duration-500 rounded-full flex items-center justify-end pr-4 ${
+                      className={`h-full transition-all duration-700 ease-out rounded-full flex items-center justify-end pr-6 relative z-10 ${
                         jobStatus.status === "done"
-                          ? "bg-gradient-to-r from-green-500 to-emerald-500"
+                          ? "bg-gradient-to-r from-green-500 via-emerald-400 to-green-500 shadow-lg shadow-green-500/50"
                           : jobStatus.status === "error"
-                          ? "bg-gradient-to-r from-red-500 to-rose-500"
-                          : "bg-gradient-to-r from-blue-500 to-purple-500"
+                          ? "bg-gradient-to-r from-red-500 via-rose-400 to-red-500 shadow-lg shadow-red-500/50"
+                          : "bg-gradient-to-r from-blue-500 via-purple-400 to-blue-500 shadow-lg shadow-blue-500/50 animate-pulse"
                       }`}
-                      style={{ width: `${jobStatus.progress * 100}%` }}
+                      style={{ width: `${Math.max(jobStatus.progress * 100, 2)}%` }}
                     >
-                      <span className="text-white font-bold text-2xl">
-                        {Math.round(jobStatus.progress * 100)}%
-                      </span>
+                      {jobStatus.progress > 0.1 && (
+                        <span className="text-white font-black text-3xl drop-shadow-lg">
+                          {Math.round(jobStatus.progress * 100)}%
+                        </span>
+                      )}
                     </div>
+                    {/* 進捗テキスト（バーの外側にも表示） */}
+                    {jobStatus.progress <= 0.1 && (
+                      <div className="absolute inset-0 flex items-center justify-center z-20">
+                        <span className="text-slate-300 font-bold text-2xl">
+                          {Math.round(jobStatus.progress * 100)}%
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* メッセージ */}

@@ -65,21 +65,21 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-3xl">
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+      <div className="min-h-screen flex items-center justify-center p-24 sm:p-48">
+        <div className="w-full max-w-[192rem]">
           {/* ヘッダー */}
-          <div className="text-center mb-16">
-            <h1 className="text-6xl sm:text-7xl font-black mb-6 text-gray-900 tracking-tight">
+          <div className="text-center mb-72">
+            <h1 className="text-[27rem] font-black mb-36 text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 tracking-tight leading-none">
               JBA照合システム
             </h1>
           </div>
 
           {/* フォームカード */}
-          <div className="bg-white rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100">
+          <div className="bg-white/90 backdrop-blur-lg rounded-[4.5rem] shadow-2xl p-48 sm:p-60 border-[1.5rem] border-white/50">
             {/* 大会ID入力 */}
-            <div className="mb-10">
-              <label className="block text-xl font-bold mb-5 text-gray-800">
+            <div className="mb-48">
+              <label className="block text-[9rem] font-bold mb-24 text-gray-800">
                 大会ID
               </label>
               <input
@@ -87,39 +87,39 @@ export default function Home() {
                 placeholder="例: 12345"
                 value={gameId}
                 onChange={(e) => setGameId(e.target.value)}
-                className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-24 py-24 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-6xl font-medium"
+                className="w-full bg-gray-50 border-[1.5rem] border-gray-300 rounded-[4.5rem] px-96 py-96 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-[1.5rem] focus:ring-blue-200 transition-all text-[13.5rem] font-medium"
               />
             </div>
 
             {/* JBAログイン情報 */}
-            <div className="mb-10">
-              <label className="block text-xl font-bold mb-5 text-gray-800">
+            <div className="mb-48">
+              <label className="block text-[9rem] font-bold mb-24 text-gray-800">
                 JBAログイン情報
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-24">
                 <input
                   type="email"
                   placeholder="JBAメールアドレス"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-24 py-24 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-6xl font-medium"
+                  className="w-full bg-gray-50 border-[1.5rem] border-gray-300 rounded-[4.5rem] px-96 py-96 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-[1.5rem] focus:ring-blue-200 transition-all text-[13.5rem] font-medium"
                 />
                 <input
                   type="password"
                   placeholder="JBAパスワード"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-24 py-24 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-6xl font-medium"
+                  className="w-full bg-gray-50 border-[1.5rem] border-gray-300 rounded-[4.5rem] px-96 py-96 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-[1.5rem] focus:ring-blue-200 transition-all text-[13.5rem] font-medium"
                 />
               </div>
             </div>
 
             {/* エラー表示 */}
             {error && (
-              <div className="mb-8 p-6 bg-red-50 border-2 border-red-200 rounded-2xl">
+              <div className="mb-36 p-36 bg-red-50 border-[1.5rem] border-red-300 rounded-[4.5rem]">
                 <div className="flex items-center">
-                  <span className="mr-3 text-2xl">❌</span>
-                  <span className="text-red-800 text-xl font-semibold">{error}</span>
+                  <span className="mr-18 text-[11.25rem]">❌</span>
+                  <span className="text-red-800 text-[9rem] font-bold">{error}</span>
                 </div>
               </div>
             )}
@@ -128,16 +128,16 @@ export default function Home() {
             <button
               onClick={handleStart}
               disabled={loading}
-              className={`w-full py-[120px] px-24 rounded-2xl font-black text-white text-7xl transition-all transform shadow-xl ${
+              className={`w-full py-[540px] px-96 rounded-[4.5rem] font-black text-white text-[18rem] transition-all transform shadow-2xl border-[1.5rem] ${
                 loading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:scale-[1.01] active:scale-[0.99] hover:shadow-2xl"
+                  ? "bg-gray-400 border-gray-500 cursor-not-allowed"
+                  : "bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 border-white/50 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 active:from-blue-700 active:via-purple-700 active:to-pink-700 hover:scale-[1.02] active:scale-[0.98] hover:shadow-3xl"
               }`}
             >
               {loading ? (
                 <span className="flex items-center justify-center">
                   <svg
-                    className="animate-spin -ml-1 mr-4 h-24 w-24 text-white"
+                    className="animate-spin -ml-1 mr-24 h-96 w-96 text-white"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -156,12 +156,12 @@ export default function Home() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  処理中...
+                  <span className="text-[18rem]">処理中...</span>
                 </span>
               ) : (
                 <span className="flex items-center justify-center">
-                  <span className="mr-3 text-7xl">🚀</span>
-                  大会CSVを取得して照合開始
+                  <span className="mr-18 text-[24rem]">🚀</span>
+                  <span>大会CSVを取得して照合開始</span>
                 </span>
               )}
             </button>
