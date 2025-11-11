@@ -202,10 +202,10 @@ export default function Result() {
                       }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-block bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 text-white font-black py-12 sm:py-16 lg:py-20 px-16 sm:px-20 lg:px-24 rounded-2xl shadow-2xl hover:shadow-yellow-500/50 transition-all transform hover:scale-105 active:scale-95 text-3xl sm:text-4xl lg:text-5xl xl:text-6xl border-4 border-yellow-300"
+                      className="inline-block bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 text-white font-black py-16 sm:py-20 lg:py-24 px-20 sm:px-24 lg:px-28 rounded-2xl shadow-2xl hover:shadow-yellow-500/50 transition-all transform hover:scale-105 active:scale-95 text-4xl sm:text-5xl lg:text-6xl border-4 border-yellow-300"
                     >
                       <span className="flex items-center">
-                        <span className="mr-4 sm:mr-6 text-4xl sm:text-5xl lg:text-6xl">📥</span>
+                        <span className="mr-6 sm:mr-8 text-5xl sm:text-6xl lg:text-7xl">📥</span>
                         PDFをダウンロード
                       </span>
                     </a>

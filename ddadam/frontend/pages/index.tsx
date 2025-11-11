@@ -128,16 +128,16 @@ export default function Home() {
             <button
               onClick={handleStart}
               disabled={loading}
-              className={`w-full py-20 sm:py-24 lg:py-32 px-12 sm:px-16 lg:px-20 rounded-3xl font-black text-white text-5xl sm:text-6xl lg:text-7xl xl:text-8xl transition-all transform shadow-2xl border-8 ${
+              className={`w-full py-24 sm:py-28 lg:py-36 px-16 sm:px-20 lg:px-24 rounded-3xl font-black text-white text-6xl sm:text-7xl lg:text-8xl transition-all transform shadow-2xl border-8 ${
                 loading
                   ? "bg-gray-400 border-gray-500 cursor-not-allowed"
-                  : "bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 border-yellow-300 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 active:from-yellow-500 active:via-orange-600 active:to-red-600 hover:scale-[1.02] active:scale-[0.98] hover:shadow-2xl"
+                  : "bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 border-yellow-300 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 active:from-yellow-500 active:via-orange-600 active:to-red-600 hover:scale-105 active:scale-95 hover:shadow-2xl"
               }`}
             >
               {loading ? (
                 <span className="flex items-center justify-center">
                   <svg
-                    className="animate-spin -ml-1 mr-8 sm:mr-10 lg:mr-12 h-24 sm:h-28 lg:h-32 w-24 sm:w-28 lg:w-32 text-white"
+                    className="animate-spin -ml-1 mr-10 sm:mr-12 lg:mr-16 h-28 sm:h-32 lg:h-40 w-28 sm:w-32 lg:w-40 text-white"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -156,11 +156,11 @@ export default function Home() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  <span>処理中...</span>
+                  <span className="text-6xl sm:text-7xl lg:text-8xl">処理中...</span>
                 </span>
               ) : (
                 <span className="flex items-center justify-center">
-                  <span className="mr-6 sm:mr-8 lg:mr-10 text-6xl sm:text-7xl lg:text-8xl xl:text-9xl">🚀</span>
+                  <span className="mr-8 sm:mr-10 lg:mr-12 text-7xl sm:text-8xl lg:text-9xl">🚀</span>
                   <span>大会CSVを取得して照合開始</span>
                 </span>
               )}
