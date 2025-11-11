@@ -958,7 +958,7 @@ class IntegratedTournamentSystem:
                                             if weight_diff >= 5.0:
                                                 corrected_data['体重'] = f"{jba_weight}kg"
                                                 changed_fields.add('体重')
-                                        else:
+                                        　　else:
                                             # CSVに体重がない場合はJBAの値を使用
                                             corrected_data['体重'] = f"{jba_weight}kg"
                                             changed_fields.add('体重')
@@ -1024,19 +1024,16 @@ class IntegratedTournamentSystem:
                     
                     result['correction'] = corrected_data
                     result['message'] = 'JBA登録あり（〇）'
+                
+                # JBA登録なし（×）の場合
+                elif verification_result['status'] == 'not_found':
+                    result['correction'] = None
+                    result['message'] = 'JBA登録なし（×）'
+                
+                # その他の場合（エラーなど）
                 else:
                     result['correction'] = None
-                    result['message'] = 'JBA登録あり（〇）'
-            
-            # JBA登録なし（×）の場合
-            elif verification_result['status'] == 'not_found':
-                result['correction'] = None
-                result['message'] = 'JBA登録なし（×）'
-            
-            # その他の場合（エラーなど）
-            else:
-                result['correction'] = None
-                result['message'] = verification_result.get('message', '照合できませんでした')
+                    result['message'] = verification_result.get('message', '照合できませんでした')
                 
                 results.append(result)
             
