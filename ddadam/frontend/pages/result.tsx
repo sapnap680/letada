@@ -183,7 +183,11 @@ export default function Result() {
                     🎉 処理が完了しました！
                   </h3>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/pdf/download/${encodeURIComponent(getFilename(jobStatus.output_path))}`}
+                    href={
+                      jobStatus.output_path.startsWith("http://") || jobStatus.output_path.startsWith("https://")
+                        ? jobStatus.output_path  // SupabaseのURLをそのまま使用
+                        : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/pdf/download/${encodeURIComponent(getFilename(jobStatus.output_path))}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all"

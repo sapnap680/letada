@@ -7,7 +7,6 @@ JBAデータベースと照合してCSVファイルを自動訂正
 # Streamlit import removed
 import pandas as pd
 import logging
-
 import requests
 import json
 from bs4 import BeautifulSoup
@@ -21,6 +20,9 @@ import os
 import concurrent.futures
 import time
 import threading
+
+# ロガー初期化
+logger = logging.getLogger(__name__)
 
 # Streamlit 非依存化のためのスタブ
 try:
@@ -70,6 +72,10 @@ class JBAVerificationSystem:
             'X-Requested-With': 'XMLHttpRequest'
         })
         self.logged_in = False
+        
+        # 🚀 パフォーマンス改善: チーム情報のキャッシュ
+        self.teams_cache = {}  # {search_name: [teams]}
+        self.team_members_cache = {}  # {team_url: team_data}
     
     def get_current_fiscal_year(self):
         """現在の年度を取得"""
@@ -107,25 +113,24 @@ class JBAVerificationSystem:
         return normalized
     
     def get_search_variations(self, university_name):
-        """大学名の検索バリエーションを生成"""
+        """大学名から「大学校」または「大学」を外した名前だけを返す"""
         if not university_name:
             return []
         
-        variations = [university_name.strip()]
+        # 「大学校」を除いた部分を返す（「防衛大学校」→「防衛」）
+        if '大学校' in university_name:
+            base_without_daigakko = university_name.replace('大学校', '').strip()
+            if base_without_daigakko and len(base_without_daigakko) > 1:  # 最低2文字以上
+                return [base_without_daigakko]
         
-        # 長い大学名の場合、短縮バリエーションも追加
-        if len(university_name) > 6:  # 長い名前の場合
-            # 語尾を段階的に削除
-            suffixes_to_remove = ['体育会バスケットボール部', 'バスケットボール部', '体育会', '部']
-            
-            for suffix in suffixes_to_remove:
-                if university_name.endswith(suffix):
-                    base_name = university_name[:-len(suffix)].strip()
-                    if base_name and len(base_name) > 2:  # 最低3文字以上
-                        variations.append(base_name)
+        # 「大学」を除いた部分を返す（「早稲田大学」→「早稲田」）
+        if '大学' in university_name:
+            base_without_daigaku = university_name.replace('大学', '').strip()
+            if base_without_daigaku and len(base_without_daigaku) > 1:  # 最低2文字以上
+                return [base_without_daigaku]
         
-        # 重複を削除
-        return list(set(variations))
+        # 「大学校」「大学」がない場合はそのまま返す
+        return [university_name.strip()]
     
     def login(self, email, password):
         """JBAサイトにログイン"""
@@ -455,15 +460,15 @@ class JBAVerificationSystem:
             # 選手一覧のテーブルを探す
             member_tables = soup.find_all('table', class_='table')
             
-            for table in member_tables:
+            for table_idx, table in enumerate(member_tables):
                 rows = table.find_all('tr')
                 
-                for row in rows[1:]:  # ヘッダー行をスキップ
+                for row_idx, row in enumerate(rows[1:], start=1):  # ヘッダー行をスキップ
                     cells = row.find_all(['td', 'th'])
                     
                     if len(cells) >= 3:  # 最低限の情報がある行のみ処理
-                        # 選手名のリンクを探す
-                        name_link = row.find('a', href=re.compile(r'/player/\d+'))
+                        # 選手名のリンクを探す（JBAの実際のURLパターン: /member/to-team/数字/detail）
+                        name_link = row.find('a', href=re.compile(r'/member/to-team/\d+'))
                         
                         if name_link:
                             player_name = name_link.get_text(strip=True)
@@ -504,27 +509,36 @@ class JBAVerificationSystem:
                                 "detail_url": detail_url
                             })
             
+            # 最終結果をログに記録（メンバーが0人の場合のみ警告）
+            if len(members) == 0:
+                logger.warning(f"⚠️ チーム {team_name} のメンバーが取得できませんでした")
+            
             return {
                 "team_name": team_name,
                 "members": members
             }
             
         except Exception as e:
+            logger.error(f"❌ メンバー取得エラー: {str(e)}", exc_info=True)
             return {"team_name": "Error", "members": []}
     
-    def get_player_details(self, detail_url):
-        """選手詳細ページから身長・体重などの詳細情報を取得"""
+    def get_player_details(self, detail_url, fields=None):
+        """
+        選手詳細ページから必要最小限の情報のみ取得
+        
+        Args:
+            detail_url: 選手詳細ページのURL
+            fields: 取得するフィールドのリスト（Noneの場合は全て取得）
+                   例: ['height', 'weight', 'grade'] または None（全て）
+        """
         try:
             if not detail_url:
                 return {}
-            
-            # 選手詳細情報を取得中
             
             # 選手詳細ページにアクセス
             detail_page = self.session.get(detail_url)
             
             if detail_page.status_code != 200:
-                # 選手詳細ページにアクセスできません
                 return {}
             
             soup = BeautifulSoup(detail_page.content, 'html.parser')
@@ -532,19 +546,27 @@ class JBAVerificationSystem:
             # 選手詳細情報を抽出
             player_details = {}
             
-            # 身長・体重情報を探す
-            # 一般的なパターンを試す
+            # 🚀 パフォーマンス改善3: 必要最小限のフィールドのみ処理
+            need_height = fields is None or 'height' in fields
+            need_weight = fields is None or 'weight' in fields
+            need_grade = fields is None or 'grade' in fields
+            need_position = fields is None or 'position' in fields
+            need_school = fields is None or 'school' in fields
+            need_uniform = fields is None or 'uniform_number' in fields
+            need_kana_name = fields is None or 'kana_name' in fields
+            
+            # 身長・体重情報を探す（必要な場合のみ）
             height_patterns = [
                 r'身長[：:]\s*(\d+\.?\d*)\s*cm',
                 r'身長[：:]\s*(\d+\.?\d*)\s*センチ',
                 r'Height[：:]\s*(\d+\.?\d*)\s*cm'
-            ]
+            ] if need_height or need_weight else []
             
             weight_patterns = [
                 r'体重[：:]\s*(\d+\.?\d*)\s*kg',
                 r'体重[：:]\s*(\d+\.?\d*)\s*キロ',
                 r'Weight[：:]\s*(\d+\.?\d*)\s*kg'
-            ]
+            ] if need_weight else []
             
             # テーブルから情報を抽出
             tables = soup.find_all('table')
@@ -556,43 +578,43 @@ class JBAVerificationSystem:
                         label = cells[0].get_text(strip=True)
                         value = cells[1].get_text(strip=True)
                         
-                        # 身長情報（JBAの「身長（競技者用）」に対応）
-                        if '身長' in label or 'Height' in label:
-                            # 数値部分を抽出
+                        # 身長情報（必要な場合のみ）
+                        if need_height and ('身長' in label or 'Height' in label):
                             import re
                             height_match = re.search(r'(\d+\.?\d*)', value)
-                            if height_match and value.strip():  # 空でない場合のみ
+                            if height_match and value.strip():
                                 player_details['height'] = height_match.group(1)
                         
-                        # 体重情報（JBAの「体重（競技者用）」に対応）
-                        elif '体重' in label or 'Weight' in label:
-                            # 数値部分を抽出
+                        # 体重情報（必要な場合のみ）
+                        elif need_weight and ('体重' in label or 'Weight' in label):
                             import re
                             weight_match = re.search(r'(\d+\.?\d*)', value)
-                            if weight_match and value.strip():  # 空でない場合のみ
+                            if weight_match and value.strip():
                                 player_details['weight'] = weight_match.group(1)
                         
-                        # ポジション情報
-                        elif 'ポジション' in label or 'Position' in label:
+                        # ポジション情報（必要な場合のみ）
+                        elif need_position and ('ポジション' in label or 'Position' in label):
                             player_details['position'] = value
                         
-                        # 出身校情報
-                        elif '出身校' in label or '出身' in label:
+                        # 出身校情報（必要な場合のみ）
+                        elif need_school and ('出身校' in label or '出身' in label):
                             player_details['school'] = value
                         
-                        # 学年情報
-                        elif '学年' in label or 'Grade' in label:
+                        # 学年情報（必要な場合のみ）
+                        elif need_grade and ('学年' in label or 'Grade' in label):
                             player_details['grade'] = value
                         
-                        # ユニフォーム番号
-                        elif 'ユニフォーム番号' in label or '背番号' in label:
+                        # ユニフォーム番号（必要な場合のみ）
+                        elif need_uniform and ('ユニフォーム番号' in label or '背番号' in label):
                             player_details['uniform_number'] = value
             
-            # テーブルで見つからない場合は、ページ全体から正規表現で検索
-            if 'height' not in player_details or 'weight' not in player_details:
+                        # 氏名カナ（必要な場合のみ）
+                        elif need_kana_name and ('氏名カナ' in label or 'カナ名' in label or 'フリガナ' in label or 'ふりがな' in label):
+                            player_details['kana_name'] = value
+            
+            # テーブルで見つからない場合は、ページ全体から正規表現で検索（必要な場合のみ）
+            if need_height and 'height' not in player_details:
                 page_text = soup.get_text()
-                
-                # 身長を検索
                 for pattern in height_patterns:
                     import re
                     match = re.search(pattern, page_text)
@@ -600,7 +622,9 @@ class JBAVerificationSystem:
                         player_details['height'] = match.group(1)
                         break
                 
-                # 体重を検索
+            if need_weight and 'weight' not in player_details:
+                if 'page_text' not in locals():
+                    page_text = soup.get_text()
                 for pattern in weight_patterns:
                     import re
                     match = re.search(pattern, page_text)
@@ -682,163 +706,128 @@ class JBAVerificationSystem:
         result = "".join(differences)
         return f"🔍 差分: {result}"
 
-    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None):
+    def verify_player_info(self, player_name, birth_date, university, get_details=False, threshold=1.0, player_no=None, kana_name=None):
         """個別選手情報の照合（男子チームのみ）"""
         try:
             logger.info(f"🔍 選手照合: {player_name}, 大学: {university}")
             
-            # Noがない人（コーチ）の場合はJBA登録があるかだけ確認
-            if not player_no or player_no == "" or player_no == "コーチ":
-                logger.info(f"🔍 コーチ照合: {player_name}")
-                # コーチの場合は名前のみで照合
-                search_variations = self.get_search_variations(university)
-                for variation in search_variations:
-                    teams = self.search_teams_by_university(variation)
-                    if teams:
-                        for team in teams:
-                            team_data = self.get_team_members(team['url'])
-                            if team_data and team_data["members"]:
-                                for member in team_data["members"]:
-                                    name_similarity = self.calculate_similarity(player_name, member["name"])
-                                    if name_similarity >= 0.6:
-                                        if get_details and member.get("detail_url"):
-                                            player_details = self.get_player_details(member["detail_url"])
-                                            member.update(player_details)
-                                        return {
-                                            "status": "match" if name_similarity >= 0.6 else "not_found",
-                                            "jba_data": member,
-                                            "similarity": name_similarity
-                                        }
-                return {"status": "not_found", "message": f"{player_name}のJBA登録が見つかりませんでした"}
+            # 氏名がアルファベットの場合のみ、カナ名で選手名を探す
+            import re
+            is_alphabet_only = bool(re.match(r'^[A-Za-z\s]+$', player_name)) if player_name else False
             
-            # 大学名の検索バリエーションを生成
+            # ログイン状態チェック
+            if not self.logged_in:
+                logger.error("❌ JBAにログインしていません")
+                return {"status": "error", "message": "JBAログインが必要です"}
+            
+            # 背番号がない場合も選手名・カナ名で照合（コーチ扱いをやめる）
+            # 背番号の有無に関わらず、選手名・カナ名で照合する
+            
+            # 大学名から「大学」を外した名前で検索
             search_variations = self.get_search_variations(university)
-            logger.info(f"🔍 検索バリエーション: {search_variations}")
+            if not search_variations:
+                logger.warning(f"⚠️ {university}の検索名が生成できませんでした")
+                return {"status": "not_found", "message": f"{university}の検索名が生成できませんでした"}
             
-            all_matched_members = []  # すべてのマッチ候補を保存
+            # 最初のバリエーション（大学名から「大学」を外した名前）のみで検索
+            search_name = search_variations[0]
             
-            teams = []
-            for variation in search_variations:
-                logger.info(f"🔍 チーム検索開始: {variation}")
-                teams = self.search_teams_by_university(variation)
+            # 🚀 パフォーマンス改善: チーム情報をキャッシュから取得
+            if search_name in self.teams_cache:
+                teams = self.teams_cache[search_name]
+                logger.debug(f"💾 キャッシュからチーム情報を取得: {len(teams)}チーム")
+            else:
+                logger.info(f"🔍 チーム検索開始: {search_name}")
+                try:
+                    teams = self._search_teams_by_university_silent(search_name)
+                    # キャッシュに保存
+                    self.teams_cache[search_name] = teams
                 logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
-                
-                if teams:
-                    # チームが見つかりました
-                    break
-                else:
-                    # チームが見つかりませんでした
-                    pass
+                except Exception as search_error:
+                    logger.error(f"❌ チーム検索エラー ({search_name}): {search_error}")
+                    teams = []
             
             if not teams:
-                # 男子チームが見つかりませんでした
+                logger.warning(f"⚠️ {university}の男子チームが見つかりませんでした")
                 return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
             # 各チームのメンバー情報を取得して照合
             for team in teams:
+                try:
+                    # 🚀 パフォーマンス改善: メンバー情報をキャッシュから取得
+                    if team['url'] in self.team_members_cache:
+                        team_data = self.team_members_cache[team['url']]
+                        logger.debug(f"💾 キャッシュからメンバー情報を取得: {team['name']}")
+                    else:
                 logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
-                team_data = self.get_team_members(team['url'])
-                
-                if team_data and team_data["members"]:
-                    logger.info(f"🔍 メンバー数: {len(team_data['members'])}人")
+                        team_data = self._get_team_members_silent(team['url'])
+                        # キャッシュに保存
+                        self.team_members_cache[team['url']] = team_data
+                    
+                    if not team_data or not team_data.get("members"):
+                        logger.warning(f"⚠️ チーム {team['name']} のメンバーが取得できませんでした")
+                        continue
+                    
+                    # 🚀 パフォーマンス改善: ログ出力を削減
+                    logger.debug(f"🔍 メンバー数: {len(team_data['members'])}人")
                     
                     for i, member in enumerate(team_data["members"]):
-                        logger.info(f"  - メンバー{i+1}: {member['name']}")
+                        try:
+                            # 氏名がアルファベットの場合のみ、カナ名で選手名を探す
+                            search_name = player_name
+                            if is_alphabet_only and kana_name:
+                                # カナ名で選手名を探す（JBAデータの氏名カナと照合）
+                                search_name = kana_name
                         
                         # 名前の類似度チェック
-                        name_similarity = self.calculate_similarity(player_name, member["name"])
-
-                        # デバッグ情報を表示
-                        logger.info(f"  - JBA選手: {member['name']}")
-                        logger.info(f"  - 名前類似度: {name_similarity:.3f}")
-                        
-                        # 微妙な違いを表示（0.6以上の候補のみ）
-                        if name_similarity >= 0.6:
-                            diff_info = self.show_name_differences(player_name, member["name"])
-                            logger.info(f"  - {diff_info}")
-
-                        # 第1段階: 0.6の閾値で候補を探す
-                        if name_similarity >= 0.6:
-                            # 候補発見
+                            name_similarity = self.calculate_similarity(search_name, member.get("name", ""))
                             
-                            # 詳細情報を取得する場合
+                            # カナ名も照合（JBAデータの氏名カナと照合）
+                            kana_similarity = 0.0
+                            if kana_name and member.get("kana_name"):
+                                kana_similarity = self.calculate_similarity(kana_name, member.get("kana_name", ""))
+                            
+                            # 名前またはカナ名の類似度が0.6以上ならJBA登録あり（〇）として扱う
+                            max_similarity = max(name_similarity, kana_similarity)
+                            if max_similarity >= 0.6:
+                                # 🚀 パフォーマンス改善: デバッグ情報（マッチした場合のみ）
+                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 名前類似度: {name_similarity:.3f}, カナ類似度: {kana_similarity:.3f}")
+                                
+                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
                             if get_details and member.get("detail_url"):
-                                player_details = self.get_player_details(member["detail_url"])
+                                    try:
+                                        if player_no:
+                                            # 背番号がある場合は身長・体重・学年を取得
+                                            fields = ['height', 'weight', 'grade']
+                                        else:
+                                            # 背番号がない場合はカナ名も取得（照合に使用）
+                                            fields = ['kana_name']
+                                        player_details = self.get_player_details(member["detail_url"], fields=fields)
                                 member.update(player_details)
-                            
-                            # 新しい完全一致判定ロジック
-                            # 選手名、カナ名、学年、身長、体重が一致すれば完全一致
-                            csv_data = {
-                                '選手名': player_name,
-                                'カナ名': '',  # CSVから取得
-                                '学年': '',    # CSVから取得
-                                '身長': '',    # CSVから取得
-                                '体重': ''     # CSVから取得
-                            }
-                            
-                            # JBAデータとの照合
-                            jba_name_match = name_similarity >= 1.0
-                            jba_kana_match = True  # カナ名は常に一致とする
-                            jba_grade_match = True  # 学年は常に一致とする
-                            jba_height_match = True  # 身長は常に一致とする
-                            
-                            # 体重の照合（JBAにない場合は定義内にあれば完全一致）
-                            jba_weight_match = True
-                            if 'weight' in member and member['weight']:
-                                # JBAに体重がある場合は照合
-                                jba_weight_match = True  # 簡易的に一致とする
-                            else:
-                                # JBAに体重がない場合は定義内にあれば完全一致
-                                jba_weight_match = True
-                            
-                            # すべての条件が満たされれば完全一致
-                            if jba_name_match and jba_kana_match and jba_grade_match and jba_height_match and jba_weight_match:
-                                # 完全一致
+                                    except Exception as detail_error:
+                                        logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
+                                
+                                # JBA登録あり（〇）として返す
                                 return {
                                     "status": "match",
                                     "jba_data": member,
-                                    "similarity": name_similarity
+                                    "similarity": max_similarity
                                 }
-                            
-                            # 0.6以上1.0未満の候補も保存（最終的に返す可能性）
-                            elif name_similarity >= 0.6 and name_similarity < 1.0:
-                                # 候補保存
-                                
-                                if get_details and member.get("detail_url"):
-                                    player_details = self.get_player_details(member["detail_url"])
-                                    member.update(player_details)
-                                
-                                all_matched_members.append({
-                                    "status": "partial_match",
-                                    "jba_data": member,
-                                    "similarity": name_similarity,
-                                    "message": f"部分一致: {member['name']} (類似度: {name_similarity:.3f})"
-                                })
-                else:
-                    # チームのメンバー情報が取得できませんでした
-                    pass
-
-            # 完全一致を優先し、なければ部分一致を返す
-            if all_matched_members:
-                # 完全一致（類似度1.0）を優先
-                exact_matches = [m for m in all_matched_members if m["similarity"] >= 1.0]
-                if exact_matches:
-                    # 完全一致候補
-                    return exact_matches[0]  # 最初の完全一致を返す
+                        
+                        except Exception as member_error:
+                            logger.error(f"❌ メンバー処理エラー: {member_error}")
+                            continue
                 
-                # 部分一致（類似度0.6以上1.0未満）を返す
-                partial_matches = [m for m in all_matched_members if m["similarity"] >= 0.6 and m["similarity"] < 1.0]
-                if partial_matches:
-                    # 部分一致候補
-                    return partial_matches[0]  # 最初の部分一致を返す
-                
-                # その他の候補
-                # その他候補
-                return all_matched_members[0]
+                except Exception as team_error:
+                    logger.error(f"❌ チーム処理エラー ({team.get('name', 'Unknown')}): {team_error}")
+                    continue
 
+            # JBA登録が見つからなかった場合（×）
+            logger.warning(f"⚠️ {player_name} のJBA登録が見つかりませんでした")
             return {"status": "not_found", "message": "JBAデータベースに該当する選手が見つかりませんでした"}
 
         except Exception as e:
+            logger.error(f"❌ 照合エラー ({player_name}): {str(e)}", exc_info=True)
             return {"status": "error", "message": f"照合エラー: {str(e)}"}
 
 # AI機能は使用しないため削除
