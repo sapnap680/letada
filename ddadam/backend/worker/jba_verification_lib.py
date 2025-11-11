@@ -742,7 +742,7 @@ class JBAVerificationSystem:
                     teams = self._search_teams_by_university_silent(search_name)
                     # キャッシュに保存
                     self.teams_cache[search_name] = teams
-                logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
+                    logger.info(f"🔍 検索結果: {len(teams)}チーム見つかりました")
                 except Exception as search_error:
                     logger.error(f"❌ チーム検索エラー ({search_name}): {search_error}")
                     teams = []
@@ -759,7 +759,7 @@ class JBAVerificationSystem:
                         team_data = self.team_members_cache[team['url']]
                         logger.debug(f"💾 キャッシュからメンバー情報を取得: {team['name']}")
                     else:
-                logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
+                        logger.info(f"🔍 チーム: {team['name']} のメンバーを取得中...")
                         team_data = self._get_team_members_silent(team['url'])
                         # キャッシュに保存
                         self.team_members_cache[team['url']] = team_data
@@ -794,7 +794,7 @@ class JBAVerificationSystem:
                                 logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 名前類似度: {name_similarity:.3f}, カナ類似度: {kana_similarity:.3f}")
                                 
                                 # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
-                            if get_details and member.get("detail_url"):
+                                if get_details and member.get("detail_url"):
                                     try:
                                         if player_no:
                                             # 背番号がある場合は身長・体重・学年を取得
@@ -803,7 +803,7 @@ class JBAVerificationSystem:
                                             # 背番号がない場合はカナ名も取得（照合に使用）
                                             fields = ['kana_name']
                                         player_details = self.get_player_details(member["detail_url"], fields=fields)
-                                member.update(player_details)
+                                        member.update(player_details)
                                     except Exception as detail_error:
                                         logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
                                 

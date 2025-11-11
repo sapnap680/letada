@@ -70,6 +70,10 @@ class IntegratedTournamentSystem:
         self._cache = {}
         self._cache_lock = threading.Lock()
         
+        # 編集ページから取得した選手名を記録（JBA照合時に優先するため）
+        # キー: (university_name, player_name) -> True
+        self.edited_player_names = {}
+        
         # CPU最適化
         self.cpu_count = multiprocessing.cpu_count()
         self.max_workers = min(self.max_workers, self.cpu_count * 2)
@@ -268,8 +272,283 @@ class IntegratedTournamentSystem:
         except Exception as e:
             pass  # エラーメッセージも表示しない
         
-    def login_and_get_tournament_csvs(self, username, password, game_id):
-        """ログインして大会の全CSVを取得"""
+    def _get_player_name_from_edit_page(self, session, view_url, player_name_with_question):
+        """編集ページから正しい選手名を取得（「?」を含む選手名を修正）"""
+        try:
+            # 詳細ページのURLから編集ページのURLを推測
+            edit_url = view_url.replace("/view/", "/edit/")
+            
+            # 編集ページにアクセス
+            response = session.get(edit_url, timeout=30)
+            if response.status_code != 200:
+                return None
+            
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # テーブルを探す
+            tables = soup.find_all("table")
+            
+            # 「?」を含む選手名から比較用の文字列を生成
+            # 例: "?本 晴暖" -> "本 晴暖"
+            question_cleaned = player_name_with_question.replace('?', '').strip()
+            
+            for table in tables:
+                rows = table.find_all("tr")
+                if len(rows) > 5:  # 選手リストの可能性
+                    for row in rows:
+                        # セレクトボックスから選択されている選手名を取得
+                        selects = row.find_all("select")
+                        player_name_from_edit = None
+                        position_from_edit = None
+                        number_from_edit = None
+                        
+                        for select in selects:
+                            name_attr = select.get("name", "")
+                            selected_option = select.find("option", selected=True)
+                            if selected_option:
+                                value = selected_option.get_text(strip=True)
+                                if "user_id" in name_attr:
+                                    if value and value != '選択してください' and '?' not in value:
+                                        player_name_from_edit = value
+                                elif "g_position" in name_attr:
+                                    position_from_edit = value
+                                elif "g_number" in name_attr:
+                                    number_from_edit = value
+                        
+                        # 選手名が取得できた場合、マッチングを試みる
+                        if player_name_from_edit:
+                            # 方法1: 「?」を除いた部分が正しい名前に含まれるか
+                            if question_cleaned and question_cleaned in player_name_from_edit:
+                                return player_name_from_edit
+                            
+                            # 方法2: 名前の後半部分（名字の後）が一致するか
+                            # 例: "?本 晴暖" と "栁本 晴暖" -> " 晴暖" が一致
+                            if ' ' in question_cleaned:
+                                parts = question_cleaned.split(' ', 1)
+                                if len(parts) == 2:
+                                    last_part = parts[1]  # "晴暖"
+                                    if ' ' in player_name_from_edit:
+                                        correct_parts = player_name_from_edit.split(' ', 1)
+                                        if len(correct_parts) == 2 and correct_parts[1] == last_part:
+                                            return player_name_from_edit
+                            
+                            # 方法3: 文字数が同じで、最初の文字以外が一致するか
+                            if len(question_cleaned) == len(player_name_from_edit):
+                                if question_cleaned[1:] == player_name_from_edit[1:]:
+                                    return player_name_from_edit
+            
+            return None
+        except Exception as e:
+            return None
+    
+    def _extract_data_from_html_table(self, session, view_url, university_name):
+        """HTMLページから編集ページ経由で選手リストを取得（「?」なし、旧字体保持）"""
+        try:
+            print(f"🌐 HTMLからデータ取得中: {university_name}")
+            
+            # 詳細ページのURLから編集ページのURLを推測
+            edit_url = view_url.replace("/view/", "/edit/")
+            
+            # 編集ページにアクセス（選手リストが含まれている）
+            print(f"  📄 編集ページにアクセス中...")
+            response = session.get(edit_url, timeout=30)
+            
+            if response.status_code != 200:
+                print(f"  ⚠️ 編集ページにアクセスできません。詳細ページを試します...")
+                response = session.get(view_url, timeout=30)
+                response.raise_for_status()
+            else:
+                response.raise_for_status()
+            
+            # HTMLをパース（UTF-8で正しくデコードされる）
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # テーブルを探す
+            tables = soup.find_all("table")
+            
+            all_players_data = []
+            
+            for table in tables:
+                rows = table.find_all("tr")
+                if len(rows) > 5:  # 選手リストの可能性があるテーブル
+                    print(f"  📊 テーブルを解析中: {len(rows)}行")
+                    
+                    # 各行から選手データを抽出
+                    for row in rows:
+                        # セレクトボックスから選択されている選手名を取得
+                        selects = row.find_all("select")
+                        player_name = None
+                        
+                        for select in selects:
+                            selected_option = select.find("option", selected=True)
+                            if selected_option:
+                                name = selected_option.get_text(strip=True)
+                                if name and name != '選択してください' and '?' not in name:
+                                    # 選手名の可能性が高い（長さが適切で、漢字を含む）
+                                    if len(name) >= 2 and len(name) <= 10:
+                                        # 漢字、ひらがな、カタカナを含むか確認
+                                        import re
+                                        if re.search(r'[一-龠々〆〤\u3040-\u309F\u30A0-\u30FF]', name):
+                                            player_name = name
+                                            break
+                        
+                        if player_name:
+                            # 行の他のデータも取得（name属性から列名を推測）
+                            player_data = {'選手名': player_name}
+                            
+                            for td in row.find_all(["td", "th"]):
+                                # セレクトボックスの場合
+                                select_in_td = td.find("select")
+                                if select_in_td:
+                                    selected = select_in_td.find("option", selected=True)
+                                    if selected:
+                                        value = selected.get_text(strip=True)
+                                        # name属性から列名を推測
+                                        name_attr = select_in_td.get("name", "")
+                                        if "user_id" in name_attr:
+                                            col_name = "選手名"
+                                        elif "g_position" in name_attr:
+                                            col_name = "ポジション"
+                                        elif "g_number" in name_attr:
+                                            col_name = "背番号"
+                                        else:
+                                            col_name = f"列_{name_attr}" if name_attr else "列_unknown"
+                                        if col_name != "選手名":  # 選手名は既に設定済み
+                                            player_data[col_name] = value
+                                else:
+                                    # 入力フィールドの場合
+                                    input_field = td.find(["input", "textarea"])
+                                    if input_field:
+                                        input_type = input_field.get("type", "").lower()
+                                        if input_type == "checkbox":
+                                            value = "true" if input_field.get("checked") else "false"
+                                        else:
+                                            value = input_field.get("value", "").strip()
+                                        
+                                        # name属性から列名を推測
+                                        name_attr = input_field.get("name", "")
+                                        if "g_number" in name_attr:
+                                            col_name = "背番号"
+                                        elif "captain_flg" in name_attr:
+                                            col_name = "キャプテン"
+                                        else:
+                                            col_name = f"列_{name_attr}" if name_attr else "列_unknown"
+                                        
+                                        if value:
+                                            player_data[col_name] = value
+                                    else:
+                                        # 通常のテキスト（ラベルなど）
+                                        text = td.get_text(strip=True)
+                                        if text and text not in ['↑↓', '↑', '↓']:
+                                            # ラベルや説明テキストの可能性
+                                            label = td.find("label")
+                                            if label:
+                                                label_text = label.get_text(strip=True)
+                                                if label_text:
+                                                    player_data[label_text] = text
+                            
+                            all_players_data.append(player_data)
+            
+            if not all_players_data:
+                # セレクトボックスから取得できなかった場合、CSVリンクを探す
+                print(f"  ⚠️ 編集ページから選手リストを取得できませんでした。CSVリンクを探します...")
+                csv_url = None
+                for a in soup.find_all("a", href=True):
+                    href = a.get("href")
+                    if href and "/master-admin-game_category_teams/csv/id/" in href:
+                        if href.startswith("/"):
+                            csv_url = f"{self.base_url}{href}"
+                        else:
+                            csv_url = href
+                        print(f"  ✅ CSVリンクを発見: {csv_url}")
+                        break
+                
+                if csv_url:
+                    # CSVを取得（フォールバック）
+                    csv_response = session.get(csv_url, timeout=30)
+                    csv_response.raise_for_status()
+                    
+                    csv_encodings = ['utf-8', 'shift_jis', 'cp932', 'iso-2022-jp', 'euc-jp', 'utf-8-sig']
+                    df = None
+                    
+                    for encoding in csv_encodings:
+                        try:
+                            if encoding == 'utf-8-sig':
+                                csv_text = csv_response.content.decode('utf-8-sig')
+                            else:
+                                csv_text = csv_response.content.decode(encoding)
+                            df = pd.read_csv(StringIO(csv_text))
+                            print(f"  ✅ CSVエンコーディング成功: {encoding}")
+                            break
+                        except (UnicodeDecodeError, pd.errors.ParserError, UnicodeError):
+                            continue
+                    
+                    if df is not None and not df.empty:
+                        df['大学名'] = university_name
+                        print(f"✅ {university_name}: CSVから {len(df)} 行のデータを取得（フォールバック）")
+                        return df
+                
+                print(f"⚠️ {university_name}: データを取得できませんでした")
+                return None
+            
+            # 選手データをDataFrameに変換
+            if all_players_data:
+                # すべての列名を収集
+                all_columns = set(['選手名'])  # 選手名は必須
+                for player in all_players_data:
+                    all_columns.update(player.keys())
+                
+                # 列名をソート（選手名を最初に）
+                sorted_columns = ['選手名'] + sorted([col for col in all_columns if col != '選手名'])
+                
+                # データを整理
+                rows_list = []
+                for player in all_players_data:
+                    row = []
+                    for col in sorted_columns:
+                        row.append(player.get(col, ""))
+                    rows_list.append(row)
+                
+                df = pd.DataFrame(rows_list, columns=sorted_columns)
+                df['大学名'] = university_name
+                
+                print(f"✅ {university_name}: HTML編集ページから {len(df)} 行のデータを取得（「?」なし、旧字体保持）")
+                print(f"  取得列: {', '.join(sorted_columns[:10])}{'...' if len(sorted_columns) > 10 else ''}")
+                return df
+            
+            return None
+            
+        except Exception as e:
+            print(f"⚠️ {university_name}: HTML取得エラー - {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _check_character_loss(self, text):
+        """旧字体が失われているかチェック（「?」が含まれている場合）"""
+        if not isinstance(text, str):
+            return False
+        # 「?」が含まれている場合、旧字体が失われている可能性がある
+        # ただし、通常の「?」と区別するため、日本語文字の後に「?」が続く場合をチェック
+        import re
+        # 日本語文字（ひらがな、カタカナ、漢字）の後に「?」が続くパターン
+        pattern = r'[ひらがなカタカナ漢字][?]'
+        if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF][?]', text):
+            return True
+        # または、連続する「?」が含まれている場合
+        if '??' in text or '???' in text:
+            return True
+        return False
+    
+    def login_and_get_tournament_csvs(self, username, password, game_id, use_html_scraping=False):
+        """ログインして大会の全CSVを取得（旧字体保持オプション付き）
+        
+        Args:
+            username: ログインユーザー名
+            password: ログインパスワード
+            game_id: 大会ID
+            use_html_scraping: Trueの場合、HTMLから直接データを取得（旧字体保持）
+        """
         
         session = requests.Session()
         session.headers.update({
@@ -311,8 +590,8 @@ class IntegratedTournamentSystem:
             
             print("✅ ログインに成功しました！")
             
-            # 大会CSV取得
-            print(f"🏀 大会ID {game_id} のCSVを取得中...")
+            # 大会ページ取得
+            print(f"🏀 大会ID {game_id} のデータを取得中...")
             target_url = f"{self.base_url}/master-admin-game_category_teams/index/search/true/game_category_id/{game_id}"
             
             response = session.get(target_url, timeout=30)
@@ -325,6 +604,78 @@ class IntegratedTournamentSystem:
                 return None
             
             soup = BeautifulSoup(response.text, "html.parser")
+            
+            # HTMLスクレイピングを使用する場合
+            if use_html_scraping:
+                print("🌐 HTMLスクレイピングモード: 編集ページから「?」なしでデータを取得します")
+                
+                # 詳細ページのリンクを抽出
+                view_links = []
+                for a in soup.find_all("a", href=True):
+                    href = a.get("href")
+                    if href and "/master-admin-game_category_teams/view/id/" in href:
+                        if href.startswith("/"):
+                            full_url = f"{self.base_url}{href}"
+                        else:
+                            full_url = href
+                        # 大学名を取得（リンクテキストから、または後で詳細ページから取得）
+                        link_text = a.get_text(strip=True)
+                        view_links.append((full_url, link_text))
+                
+                print(f"📊 {len(view_links)} 件の詳細ページリンクを検出")
+                
+                if not view_links:
+                    print("⚠️ 詳細ページリンクが見つかりませんでした。CSV取得にフォールバックします")
+                    use_html_scraping = False
+                else:
+                    # 編集ページから直接データを取得（「?」なし）
+                    all_universities_data = []
+                    
+                    for i, (view_url, link_text) in enumerate(view_links):
+                        try:
+                            print(f"📄 {i+1}/{len(view_links)} を処理中...")
+                            
+                            # 詳細ページから大学名を取得
+                            detail_response = session.get(view_url, timeout=30)
+                            if detail_response.status_code == 200:
+                                detail_soup = BeautifulSoup(detail_response.text, "html.parser")
+                                # 大学名を探す
+                                university_name = None
+                                for td in detail_soup.find_all("td"):
+                                    text = td.get_text(strip=True)
+                                    if "大学" in text and len(text) < 50:
+                                        university_name = text
+                                        break
+                                
+                                if not university_name:
+                                    university_name = link_text if link_text and link_text != "詳細" else f"大学_{i+1}"
+                            else:
+                                university_name = link_text if link_text and link_text != "詳細" else f"大学_{i+1}"
+                            
+                            # 編集ページから選手リストを取得
+                            df = self._extract_data_from_html_table(session, view_url, university_name)
+                            
+                            if df is not None and not df.empty:
+                                all_universities_data.append(df)
+                                print(f"  ✅ {university_name} 取得成功: {len(df)} 行（「?」なし）")
+                            else:
+                                print(f"  ⚠️ {university_name} の取得に失敗しました")
+                                
+                        except Exception as e:
+                            print(f"  ⚠️ {university_name if 'university_name' in locals() else f'大学_{i+1}'} の処理でエラー: {str(e)}")
+                            continue
+                    
+                    if all_universities_data:
+                        combined_df = pd.concat(all_universities_data, ignore_index=True)
+                        print(f"✅ {len(all_universities_data)} 大学のデータを取得しました（HTML編集ページから「?」なしで取得）")
+                        return combined_df
+                    else:
+                        print("⚠️ HTMLからデータを取得できませんでした。CSV取得にフォールバックします")
+                        use_html_scraping = False
+            
+            # CSV取得処理（HTMLスクレイピングが無効、または失敗した場合）
+            if not use_html_scraping:
+                print("📊 CSV取得モード: CSVからデータを取得します")
             
             # CSVリンクを抽出
             csv_links = []
@@ -389,56 +740,64 @@ class IntegratedTournamentSystem:
                         print(f"❌ CSV {i+1} 全てのエンコーディングで失敗")
                         continue
                     
-                    # 大学名を取得（文字エンコーディング対応）
-                    content_disposition = csv_response.headers.get("content-disposition", "")
-                    filename_match = re.search(r'filename="(.+)"', content_disposition)
-                    
-                    if filename_match:
-                        # 文字エンコーディングを修正
-                        university_name = filename_match.group(1).replace('.csv', '')
-                        print(f"🔍 元の大学名: {repr(university_name)}")
+                    # CSV URLから詳細ページURLを推測して大学名を取得
+                    csv_id_match = re.search(r'/csv/id/(\d+)', csv_url)
+                    view_url = None
+                    if csv_id_match:
+                        view_id = csv_id_match.group(1)
+                        view_url = f"{self.base_url}/master-admin-game_category_teams/view/id/{view_id}"
                         
-                        try:
-                            # 複数のエンコーディングを試行
-                            encodings_to_try = ['utf-8', 'shift_jis', 'cp932', 'iso-2022-jp', 'euc-jp']
+                        # 詳細ページから大学名を取得
+                        detail_response = session.get(view_url, timeout=30)
+                        if detail_response.status_code == 200:
+                            detail_soup = BeautifulSoup(detail_response.text, "html.parser")
+                            # 大学名を探す
+                            university_name = None
+                            for td in detail_soup.find_all("td"):
+                                text = td.get_text(strip=True)
+                                if "大学" in text and len(text) < 50:
+                                    university_name = text
+                                    break
                             
-                            for encoding in encodings_to_try:
-                                try:
-                                    # バイト列に戻してから指定エンコーディングでデコード
-                                    if isinstance(university_name, str):
-                                        # 文字列をバイト列に変換（latin-1経由）
-                                        byte_name = university_name.encode('latin-1')
-                                        university_name = byte_name.decode(encoding)
-                                        print(f"✅ エンコーディング成功: {encoding} -> {university_name}")
-                                        break
-                                except (UnicodeDecodeError, UnicodeEncodeError):
-                                    continue
-                            
-                            # URLデコードも試行
-                            import urllib.parse
-                            university_name = urllib.parse.unquote(university_name)
-                            
-                        except Exception as e:
-                            print(f"⚠️ エンコーディング変換失敗: {e}")
-                            # エンコーディング変換に失敗した場合はそのまま使用
-                            pass
-                        
-                        print(f"📝 最終大学名: {university_name}")
+                            if not university_name:
+                                university_name = f"大学_{i+1}"
+                        else:
+                            university_name = f"大学_{i+1}"
                     else:
                         university_name = f"大学_{i+1}"
                     
-                    # 大学名の正規化（余分な文字を除去）
-                    university_name = university_name.strip()
-                    # よくある文字化けパターンを修正
-                    university_name = university_name.replace('æ', '東').replace('å', '大').replace('é', '学')
-                    university_name = university_name.replace('ç', '科').replace('è', '学').replace('ã', 'ー')
-                    university_name = university_name.replace('ï', '学').replace('í', '学').replace('ó', '学')
+                    # 「?」を含む選手名を編集ページから修正
+                    player_name_columns = []
+                    for col in df.columns:
+                        col_lower = str(col).lower()
+                        if any(keyword in col_lower for keyword in ['選手', '氏名', 'name', '名前']):
+                            player_name_columns.append(col)
                     
-                    print(f"🎯 正規化後大学名: {university_name}")
+                    if player_name_columns and view_url:
+                        player_name_col = player_name_columns[0]
+                        corrected_count = 0
+                        
+                        for idx, row in df.iterrows():
+                            player_name = str(row[player_name_col]) if pd.notna(row[player_name_col]) else ""
+                            if player_name and '?' in player_name:
+                                # 編集ページから正しい名前を取得
+                                correct_name = self._get_player_name_from_edit_page(session, view_url, player_name)
+                                if correct_name:
+                                    df.at[idx, player_name_col] = correct_name
+                                    corrected_count += 1
+                                    # 編集ページから取得した選手名を記録（JBA照合時に優先するため）
+                                    self.edited_player_names[(university_name, correct_name)] = True
+                                    print(f"  ✅ 選手名を修正: {player_name} → {correct_name} (編集ページから取得、JBA照合時に優先)")
+                        
+                        if corrected_count > 0:
+                            print(f"  ✅ {corrected_count} 件の選手名を編集ページから修正しました（JBA照合時に優先されます）")
                     
-                    # 大学名をDataFrameに追加
-                    df['大学名'] = university_name
+                    # 大学名を追加（既に追加済みの場合はスキップ）
+                    if '大学名' not in df.columns:
+                        df['大学名'] = university_name
+                    
                     all_universities_data.append(df)
+                    print(f"  ✅ {university_name} 取得成功: {len(df)} 行")
                     
                     print(f"✅ CSV {i+1} 取得成功")
                     # Sleep removed  # サーバー負荷軽減
@@ -631,14 +990,25 @@ class IntegratedTournamentSystem:
                                 changed_fields.add('学年')
                         
                         # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
+                        # ただし、編集ページから取得した選手名の場合は優先しない
                         if 'name' in jba_data and jba_data['name']:
                             jba_name = str(jba_data['name']).strip()
                             csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
-                            if jba_name != csv_name:
+                            
+                            # 編集ページから取得した選手名かチェック
+                            is_edited_from_html = False
+                            if university_name and csv_name:
+                                is_edited_from_html = self.edited_player_names.get((university_name, csv_name), False)
+                            
+                            if jba_name != csv_name and not is_edited_from_html:
+                                # 編集ページから取得していない場合のみJBAの名前で上書き
                                 corrected_data['選手名'] = jba_name
                                 if '氏名' in corrected_data:
                                     corrected_data['氏名'] = jba_name
                                 changed_fields.add('選手名')
+                            elif is_edited_from_html:
+                                # 編集ページから取得した選手名は優先（JBAの名前で上書きしない）
+                                print(f"  📌 {csv_name}: 編集ページから取得した名前を優先（JBA: {jba_name}）")
                         
                         if 'kana_name' in jba_data and jba_data['kana_name']:
                             jba_kana = str(jba_data['kana_name']).strip()
@@ -1087,14 +1457,25 @@ class IntegratedTournamentSystem:
                         changed_fields.add('学年')
                 
                 # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
+                # ただし、編集ページから取得した選手名の場合は優先しない
                 if 'name' in jba_data and jba_data['name']:
                     jba_name = str(jba_data['name']).strip()
                     csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
-                    if jba_name != csv_name:
+                    
+                    # 編集ページから取得した選手名かチェック
+                    is_edited_from_html = False
+                    if univ and csv_name:
+                        is_edited_from_html = self.edited_player_names.get((univ, csv_name), False)
+                    
+                    if jba_name != csv_name and not is_edited_from_html:
+                        # 編集ページから取得していない場合のみJBAの名前で上書き
                         corrected_data['選手名'] = jba_name
                         if '氏名' in corrected_data:
                             corrected_data['氏名'] = jba_name
                         changed_fields.add('選手名')
+                    elif is_edited_from_html:
+                        # 編集ページから取得した選手名は優先（JBAの名前で上書きしない）
+                        print(f"  📌 {csv_name}: 編集ページから取得した名前を優先（JBA: {jba_name}）")
                 
                 if 'kana_name' in jba_data and jba_data['kana_name']:
                     jba_kana = str(jba_data['kana_name']).strip()
@@ -1872,5 +2253,181 @@ def main():
     # CLI/Streamlit UI は削除済み
     return
 
+
+def test_csv_with_correction():
+    """CSV取得（メイン）+ 「?」修正テスト
+    
+    この関数は、CSVからデータを取得し、「?」が含まれている選手名を
+    編集ページから正しい名前で自動修正するテストを実行します。
+    """
+    import pandas as pd
+    
+    username = "kcbf"
+    password = "sakura272"
+    game_id = "76"
+    
+    print("=" * 60)
+    print("CSV取得（メイン）+ 「?」修正テスト")
+    print("=" * 60)
+    print(f"モード: CSV取得（メイン）、「?」が出てきたときだけ編集ページから修正")
+    print(f"大会ID: {game_id}")
+    print("=" * 60)
+    
+    try:
+        # システム初期化
+        class MockJBA:
+            pass
+        class MockValidator:
+            pass
+        
+        system = IntegratedTournamentSystem(
+            jba_system=MockJBA(),
+            validator=MockValidator(),
+            max_workers=5,
+            use_parallel=False
+        )
+        
+        print("システム初期化完了")
+        print()
+        
+        # CSV取得（メイン）+ 「?」修正
+        print("データ取得開始...")
+        df = system.login_and_get_tournament_csvs(
+            username=username,
+            password=password,
+            game_id=game_id,
+            use_html_scraping=False  # CSVをメインに
+        )
+        
+        if df is None:
+            print("データ取得に失敗しました")
+            return False
+        
+        if df.empty:
+            print("データが空です")
+            return False
+        
+        print()
+        print("=" * 60)
+        print("データ取得成功！")
+        print("=" * 60)
+        print(f"取得データ数: {len(df)} 行")
+        print(f"カラム数: {len(df.columns)} 列")
+        print()
+        
+        # 慶應のデータを探す
+        print("慶應大学のデータを検索中...")
+        keio_data = None
+        
+        if '大学名' in df.columns:
+            keio_mask = df['大学名'].str.contains('慶應|慶応', na=False, regex=True)
+            keio_rows = df[keio_mask]
+            if not keio_rows.empty:
+                keio_data = keio_rows
+                print(f"慶應のデータを発見: {len(keio_rows)} 行")
+        
+        if keio_data is not None and not keio_data.empty:
+            print()
+            print("=" * 60)
+            print("慶應大学の選手リスト")
+            print("=" * 60)
+            
+            # 選手名列を探す
+            name_columns = []
+            for col in keio_data.columns:
+                col_lower = str(col).lower()
+                if any(keyword in col_lower for keyword in ['選手', '氏名', 'name', '名前']):
+                    name_columns.append(col)
+            
+            if name_columns:
+                name_col = name_columns[0]
+                print(f"選手名列: {name_col}")
+                print()
+                
+                # 選手一覧を表示
+                players = keio_data[name_col].dropna().tolist()
+                players = [str(p).strip() for p in players if str(p).strip() and str(p).strip() != 'nan']
+                
+                print(f"総選手数: {len(players)} 人")
+                print()
+                
+                # 「?」が含まれているか確認
+                question_marks = [p for p in players if '?' in str(p)]
+                if question_marks:
+                    print(f"⚠️ 「?」を含む選手が {len(question_marks)} 人見つかりました:")
+                    for p in question_marks:
+                        print(f"  - {p}")
+                else:
+                    print("✅ 「?」を含む選手は見つかりませんでした（すべて正しく取得できています）")
+                
+                print()
+                print("選手一覧（最初の10人）:")
+                print("-" * 60)
+                for idx, name in enumerate(players[:10], 1):
+                    name_str = str(name).strip()
+                    if name_str:
+                        # 「栁本」または「柳本」を探す
+                        if '栁本' in name_str or ('柳本' in name_str and '晴暖' in name_str):
+                            print(f"  {idx:2d}. {name_str} <-- 栁本 晴暖を発見！（「?」なし）")
+                        else:
+                            print(f"  {idx:2d}. {name_str}")
+                print("-" * 60)
+                
+                # 「栁本 晴暖」を探す
+                liuben_players = [p for p in players if '栁本' in str(p) or ('柳本' in str(p) and '晴暖' in str(p))]
+                if liuben_players:
+                    print()
+                    print("「栁本 晴暖」の選手:")
+                    for p in liuben_players:
+                        print(f"  ✅ {p} （「?」なしで取得成功！）")
+                        # 該当行のデータを表示
+                        row_data = keio_data[keio_data[name_col] == p].iloc[0]
+                        print(f"     データ:")
+                        for col in keio_data.columns:
+                            if col != name_col and col != '大学名':
+                                value = row_data[col]
+                                if pd.notna(value) and str(value) != '' and str(value) != 'nan':
+                                    print(f"       {col}: {value}")
+                
+                # CSVに保存
+                output_file = "keio_members_csv_corrected.csv"
+                keio_data.to_csv(output_file, index=False, encoding='utf-8-sig')
+                print(f"\nデータをCSVに保存しました: {output_file}")
+                print(f"  行数: {len(keio_data)}, 列数: {len(keio_data.columns)}")
+            else:
+                print("選手名列が見つかりませんでした")
+        else:
+            print("慶應のデータが見つかりませんでした")
+        
+        print()
+        print("=" * 60)
+        print("テスト完了")
+        print("=" * 60)
+        
+        return True
+        
+    except Exception as e:
+        print()
+        print("=" * 60)
+        print("エラーが発生しました")
+        print("=" * 60)
+        print(f"エラー内容: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 if __name__ == "__main__":
+    # テストモードの場合は test_csv_with_correction を実行
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        print("CSV取得（メイン）+ 「?」修正テスト")
+        print()
+        success = test_csv_with_correction()
+        
+        if success:
+            print("\nテスト成功！")
+        else:
+            print("\nテスト失敗")
+    else:
     main()
