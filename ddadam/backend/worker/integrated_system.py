@@ -757,7 +757,7 @@ class IntegratedTournamentSystem:
                                 text = td.get_text(strip=True)
                                 if "大学" in text and len(text) < 50:
                                     university_name = text
-                                    break
+                                        break
                             
                             if not university_name:
                                 university_name = f"大学_{i+1}"
@@ -794,7 +794,7 @@ class IntegratedTournamentSystem:
                     
                     # 大学名を追加（既に追加済みの場合はスキップ）
                     if '大学名' not in df.columns:
-                        df['大学名'] = university_name
+                    df['大学名'] = university_name
                     
                     all_universities_data.append(df)
                     print(f"  ✅ {university_name} 取得成功: {len(df)} 行")
@@ -923,7 +923,7 @@ class IntegratedTournamentSystem:
                         # 背番号がある場合のみ身長・体重を照合
                         if player_no:
                             # 身長の照合（5cm以上差があったらJBAの値に変更）
-                            if 'height' in jba_data and jba_data['height']:
+                        if 'height' in jba_data and jba_data['height']:
                                 try:
                                     jba_height_str = str(jba_data['height']).replace('cm', '').strip()
                                     # 値が空、0.0、nanの場合は空欄のまま
@@ -945,7 +945,7 @@ class IntegratedTournamentSystem:
                                     pass
                             
                             # 体重の照合（5kg以上差があったらJBAの値に変更）
-                            if 'weight' in jba_data and jba_data['weight']:
+                        if 'weight' in jba_data and jba_data['weight']:
                                 try:
                                     jba_weight_str = str(jba_data['weight']).replace('kg', '').strip()
                                     # 値が空、0.0、nanの場合は空欄のまま
@@ -958,7 +958,7 @@ class IntegratedTournamentSystem:
                                             if weight_diff >= 5.0:
                                                 corrected_data['体重'] = f"{jba_weight}kg"
                                                 changed_fields.add('体重')
-                                        else:
+                            else:
                                             # CSVに体重がない場合はJBAの値を使用
                                             corrected_data['体重'] = f"{jba_weight}kg"
                                             changed_fields.add('体重')
