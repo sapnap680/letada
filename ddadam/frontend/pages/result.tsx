@@ -142,17 +142,17 @@ export default function Result() {
                       </div>
                     </div>
                     <div className="text-center sm:text-right">
-                      <p className="text-5xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                      <p className="text-7xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                         {Math.round(jobStatus.progress * 100)}%
                       </p>
-                      <p className="text-sm text-slate-400 mt-1">進捗</p>
+                      <p className="text-lg text-slate-400 mt-2">進捗</p>
                     </div>
                   </div>
 
                   {/* プログレスバー */}
-                  <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden backdrop-blur-sm">
+                  <div className="w-full bg-slate-700/50 rounded-full h-12 overflow-hidden backdrop-blur-sm shadow-inner">
                     <div
-                      className={`h-full transition-all duration-500 rounded-full ${
+                      className={`h-full transition-all duration-500 rounded-full flex items-center justify-end pr-4 ${
                         jobStatus.status === "done"
                           ? "bg-gradient-to-r from-green-500 to-emerald-500"
                           : jobStatus.status === "error"
@@ -160,7 +160,11 @@ export default function Result() {
                           : "bg-gradient-to-r from-blue-500 to-purple-500"
                       }`}
                       style={{ width: `${jobStatus.progress * 100}%` }}
-                    ></div>
+                    >
+                      <span className="text-white font-bold text-2xl">
+                        {Math.round(jobStatus.progress * 100)}%
+                      </span>
+                    </div>
                   </div>
 
                   {/* メッセージ */}
@@ -169,26 +173,6 @@ export default function Result() {
                   </p>
                 </div>
 
-                {/* メタデータ */}
-                {jobStatus.metadata && (
-                  <div className="mb-6 p-5 bg-slate-900/50 border border-slate-700/50 rounded-xl backdrop-blur-sm">
-                    <h3 className="font-semibold text-slate-300 mb-3 text-lg">処理詳細</h3>
-                    <ul className="text-sm text-slate-400 space-y-2">
-                      {jobStatus.metadata.universities && (
-                        <li className="flex items-start">
-                          <span className="mr-2">🏫</span>
-                          <span>対象大学: {jobStatus.metadata.universities.join(", ")}</span>
-                        </li>
-                      )}
-                      {jobStatus.metadata.total_count && (
-                        <li className="flex items-start">
-                          <span className="mr-2">📊</span>
-                          <span>大学数: {jobStatus.metadata.total_count}校</span>
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
 
                 {/* 完了時のダウンロードボタン */}
                 {jobStatus.status === "done" && jobStatus.output_path && (
@@ -241,15 +225,6 @@ export default function Result() {
                   </div>
                 )}
 
-                {/* 処理中の自動更新メッセージ */}
-                {(jobStatus.status === "processing" || jobStatus.status === "queued") && (
-                  <div className="mt-6 p-4 bg-blue-900/30 border border-blue-500/50 rounded-xl text-center backdrop-blur-sm">
-                    <p className="text-blue-300 flex items-center justify-center">
-                      <span className="animate-pulse mr-2">🔄</span>
-                      2秒ごとに自動更新しています...
-                    </p>
-                  </div>
-                )}
               </>
             )}
 
