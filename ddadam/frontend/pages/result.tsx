@@ -150,31 +150,47 @@ export default function Result() {
                   </div>
 
                   {/* プログレスバー */}
-                  <div className="w-full bg-slate-700/50 rounded-full h-8 sm:h-12 lg:h-16 overflow-hidden backdrop-blur-sm shadow-2xl border-2 border-slate-600/50 relative">
+                  <div 
+                    className="w-full rounded-full overflow-hidden shadow-2xl border-4 relative"
+                    style={{
+                      backgroundColor: 'rgba(51, 65, 85, 0.5)',
+                      height: '4rem',
+                      borderColor: 'rgba(71, 85, 105, 0.5)',
+                    }}
+                  >
                     {/* 背景のアニメーション効果 */}
                     {(jobStatus.status === "processing" || jobStatus.status === "queued") && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer"></div>
                     )}
                     <div
-                      className={`h-full transition-all duration-700 ease-out rounded-full flex items-center justify-end pr-4 sm:pr-6 lg:pr-8 relative z-10 ${
-                        jobStatus.status === "done"
-                          ? "bg-gradient-to-r from-green-500 via-emerald-400 to-green-500 shadow-lg shadow-green-500/50"
+                      className="h-full transition-all duration-700 ease-out rounded-full flex items-center justify-end relative z-10"
+                      style={{
+                        width: `${Math.max(jobStatus.progress * 100, 3)}%`,
+                        background: jobStatus.status === "done"
+                          ? 'linear-gradient(to right, #10b981, #34d399, #10b981)'
                           : jobStatus.status === "error"
-                          ? "bg-gradient-to-r from-red-500 via-rose-400 to-red-500 shadow-lg shadow-red-500/50"
-                          : "bg-gradient-to-r from-blue-500 via-purple-400 to-blue-500 shadow-lg shadow-blue-500/50 animate-pulse"
-                      }`}
-                      style={{ width: `${Math.max(jobStatus.progress * 100, 2)}%` }}
+                          ? 'linear-gradient(to right, #ef4444, #fb7185, #ef4444)'
+                          : 'linear-gradient(to right, #3b82f6, #a855f7, #3b82f6)',
+                        paddingRight: '1.5rem',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                      }}
                     >
-                      {jobStatus.progress > 0.1 && (
-                        <span className="text-white font-black text-xl sm:text-2xl lg:text-3xl drop-shadow-lg">
+                      {jobStatus.progress > 0.05 && (
+                        <span 
+                          className="text-white font-black drop-shadow-lg"
+                          style={{ fontSize: '1.5rem' }}
+                        >
                           {Math.round(jobStatus.progress * 100)}%
                         </span>
                       )}
                     </div>
                     {/* 進捗テキスト（バーの外側にも表示） */}
-                    {jobStatus.progress <= 0.1 && (
+                    {jobStatus.progress <= 0.05 && (
                       <div className="absolute inset-0 flex items-center justify-center z-20">
-                        <span className="text-slate-300 font-bold text-xl sm:text-2xl lg:text-3xl">
+                        <span 
+                          className="text-slate-200 font-bold"
+                          style={{ fontSize: '1.5rem' }}
+                        >
                           {Math.round(jobStatus.progress * 100)}%
                         </span>
                       </div>

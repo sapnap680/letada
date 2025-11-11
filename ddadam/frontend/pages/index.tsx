@@ -76,10 +76,10 @@ export default function Home() {
           </div>
 
           {/* フォームカード */}
-          <div className="bg-white rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100">
+          <div className="rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100" style={{ backgroundColor: '#4f46e5' }}>
             {/* 大会ID入力 */}
             <div className="mb-10">
-              <label className="block text-xl font-bold mb-5 text-gray-800">
+              <label className="block text-4xl font-bold mb-5 text-white">
                 大会ID
               </label>
               <input
@@ -87,13 +87,19 @@ export default function Home() {
                 placeholder="例: 12345"
                 value={gameId}
                 onChange={(e) => setGameId(e.target.value)}
-                className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-8 py-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-2xl font-medium"
+                style={{
+                  paddingTop: '5rem',
+                  paddingBottom: '5rem',
+                  paddingLeft: '3rem',
+                  paddingRight: '3rem',
+                }}
+                className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-5xl font-medium"
               />
             </div>
 
             {/* JBAログイン情報 */}
             <div className="mb-10">
-              <label className="block text-xl font-bold mb-5 text-gray-800">
+              <label className="block text-4xl font-bold mb-5 text-white">
                 JBAログイン情報
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -102,24 +108,36 @@ export default function Home() {
                   placeholder="JBAメールアドレス"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-8 py-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-2xl font-medium"
+                  style={{
+                    paddingTop: '5rem',
+                    paddingBottom: '5rem',
+                    paddingLeft: '3rem',
+                    paddingRight: '3rem',
+                  }}
+                  className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-5xl font-medium"
                 />
                 <input
                   type="password"
                   placeholder="JBAパスワード"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-8 py-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-2xl font-medium"
+                  style={{
+                    paddingTop: '5rem',
+                    paddingBottom: '5rem',
+                    paddingLeft: '3rem',
+                    paddingRight: '3rem',
+                  }}
+                  className="w-full bg-white border-4 border-gray-300 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-200 transition-all text-5xl font-medium"
                 />
               </div>
             </div>
 
             {/* エラー表示 */}
             {error && (
-              <div className="mb-8 p-6 bg-red-50 border-2 border-red-200 rounded-2xl">
+              <div className="mb-8 p-6 bg-red-100 border-4 border-red-400 rounded-2xl">
                 <div className="flex items-center">
-                  <span className="mr-3 text-2xl">❌</span>
-                  <span className="text-red-800 text-xl font-semibold">{error}</span>
+                  <span className="mr-3 text-4xl">❌</span>
+                  <span className="text-red-900 text-3xl font-bold">{error}</span>
                 </div>
               </div>
             )}
