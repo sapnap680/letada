@@ -101,7 +101,7 @@ export default function Result() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <main className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
       <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 lg:p-12">
         <div className="w-full max-w-5xl">
           {/* ヘッダー */}
@@ -202,10 +202,10 @@ export default function Result() {
                       }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-block bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold py-6 sm:py-8 px-10 sm:px-12 lg:px-16 rounded-xl shadow-lg hover:shadow-green-500/50 transition-all transform hover:scale-105 active:scale-95 text-xl sm:text-2xl lg:text-3xl"
+                      className="inline-block bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 hover:from-yellow-300 hover:via-orange-400 hover:to-red-400 text-white font-black py-12 sm:py-16 lg:py-20 px-16 sm:px-20 lg:px-24 rounded-2xl shadow-2xl hover:shadow-yellow-500/50 transition-all transform hover:scale-105 active:scale-95 text-3xl sm:text-4xl lg:text-5xl xl:text-6xl border-4 border-yellow-300"
                     >
                       <span className="flex items-center">
-                        <span className="mr-3 sm:mr-4 text-2xl sm:text-3xl">📥</span>
+                        <span className="mr-4 sm:mr-6 text-4xl sm:text-5xl lg:text-6xl">📥</span>
                         PDFをダウンロード
                       </span>
                     </a>
