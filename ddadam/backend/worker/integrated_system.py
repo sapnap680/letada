@@ -1559,13 +1559,13 @@ class IntegratedTournamentSystem:
                 page_results = results[start_idx:end_idx]
                 
                 # テーブルデータ作成（画像の形式に準拠）
-                # ヘッダー行をParagraphに変換（英語が正しく表示されるように）
+                # ヘッダー行をParagraphに変換（日本語フォントを適用）
                 header_style = ParagraphStyle(
                     'HeaderStyle',
                     parent=styles['Normal'],
                     fontSize=5,
                     leading=6,
-                    fontName='Helvetica-Bold',  # 英語用フォント
+                    fontName=getattr(self, 'default_font', 'MS-Gothic'),  # 日本語フォントを使用
                     alignment=1  # CENTER
                 )
                 header_row = [
@@ -1604,41 +1604,48 @@ class IntegratedTournamentSystem:
                     height = d.get("身長", "")
                     weight = d.get("体重", "")
                     
-                    # 身長・体重・学年の小数点以下を切り捨て（数字のみ表示）
+                    # nanを空欄に変換
                     import re
+                    import pandas as pd
                     
-                    if height:
-                        height_str = str(height)
-                        # 数値部分を抽出して小数点以下を切り捨て（単位は除去）
-                        height_match = re.search(r'(\d+(?:\.\d+)?)', height_str)
-                        if height_match:
+                    def clean_value(val):
+                        """nanや空文字を空欄に変換"""
+                        if val is None:
+                            return ""
+                        val_str = str(val).strip()
+                        if val_str.lower() in ['nan', 'none', ''] or pd.isna(val):
+                            return ""
+                        return val_str
+                    
+                    no = clean_value(no)
+                    player_name = clean_value(player_name)
+                    kana_name = clean_value(kana_name)
+                    department = clean_value(department)
+                    grade = clean_value(grade)
+                    height = clean_value(height)
+                    weight = clean_value(weight)
+                    position = clean_value(d.get("ポジション", ""))
+                    school = clean_value(d.get("出身校", ""))
+                    
+                    # 身長・体重・学年の小数点以下を切り捨て（数字のみ表示）
+                    def truncate_decimal(value):
+                        """小数点以下を切り捨てて整数に変換"""
+                        if not value:
+                            return ""
+                        value_str = str(value)
+                        # 数値部分を抽出して小数点以下を切り捨て
+                        match = re.search(r'(\d+(?:\.\d+)?)', value_str)
+                        if match:
                             try:
-                                height_num = int(float(height_match.group(1)))
-                                height = str(height_num)  # 数字のみ表示
+                                num = int(float(match.group(1)))
+                                return str(num)
                             except (ValueError, TypeError):
-                                pass
-                    if weight:
-                        weight_str = str(weight)
-                        # 数値部分を抽出して小数点以下を切り捨て（単位は除去）
-                        weight_match = re.search(r'(\d+(?:\.\d+)?)', weight_str)
-                        if weight_match:
-                            try:
-                                weight_num = int(float(weight_match.group(1)))
-                                weight = str(weight_num)  # 数字のみ表示
-                            except (ValueError, TypeError):
-                                pass
-                    if grade:
-                        grade_str = str(grade)
-                        # 学年の小数点以下を切り捨て
-                        grade_match = re.search(r'(\d+(?:\.\d+)?)', grade_str)
-                        if grade_match:
-                            try:
-                                grade_num = int(float(grade_match.group(1)))
-                                grade = str(grade_num)
-                            except (ValueError, TypeError):
-                                pass
-                    position = d.get("ポジション", "")
-                    school = d.get("出身校", "")
+                                return ""
+                        return ""
+                    
+                    height = truncate_decimal(height)
+                    weight = truncate_decimal(weight)
+                    grade = truncate_decimal(grade)
                     
                     # 変更があった場合は赤字で表示（changed_fieldsを使用）
                     if r.get("correction"):
@@ -1661,77 +1668,90 @@ class IntegratedTournamentSystem:
                         if '学年' in changed_fields:
                             corrected_grade = corrected_data.get("学年", grade)
                             # 修正された学年も小数点以下を切り捨て
-                            if corrected_grade:
-                                corrected_grade_str = str(corrected_grade)
-                                corrected_grade_match = re.search(r'(\d+(?:\.\d+)?)', corrected_grade_str)
-                                if corrected_grade_match:
-                                    try:
-                                        corrected_grade_num = int(float(corrected_grade_match.group(1)))
-                                        corrected_grade = str(corrected_grade_num)
-                                    except (ValueError, TypeError):
-                                        pass
-                            grade = f'<font color="red">{corrected_grade}</font>'
+                            corrected_grade = truncate_decimal(corrected_grade)
+                            grade = f'<font color="red">{corrected_grade}</font>' if corrected_grade else ""
                         
                         # 身長が変更された場合のみ赤字で表示
                         if '身長' in changed_fields:
                             corrected_height = corrected_data.get("身長", height)
                             # 修正された身長も小数点以下を切り捨て（数字のみ表示）
-                            if corrected_height:
-                                corrected_height_str = str(corrected_height)
-                                corrected_height_match = re.search(r'(\d+(?:\.\d+)?)', corrected_height_str)
-                                if corrected_height_match:
-                                    try:
-                                        corrected_height_num = int(float(corrected_height_match.group(1)))
-                                        corrected_height = str(corrected_height_num)  # 数字のみ表示
-                                    except (ValueError, TypeError):
-                                        pass
-                            height = f'<font color="red">{corrected_height}</font>'
+                            corrected_height = truncate_decimal(corrected_height)
+                            height = f'<font color="red">{corrected_height}</font>' if corrected_height else ""
                         
                         # 体重が変更された場合のみ赤字で表示
                         if '体重' in changed_fields:
                             corrected_weight = corrected_data.get("体重", weight)
                             # 修正された体重も小数点以下を切り捨て（数字のみ表示）
-                            if corrected_weight:
-                                corrected_weight_str = str(corrected_weight)
-                                corrected_weight_match = re.search(r'(\d+(?:\.\d+)?)', corrected_weight_str)
-                                if corrected_weight_match:
-                                    try:
-                                        corrected_weight_num = int(float(corrected_weight_match.group(1)))
-                                        corrected_weight = str(corrected_weight_num)  # 数字のみ表示
-                                    except (ValueError, TypeError):
-                                        pass
-                            weight = f'<font color="red">{corrected_weight}</font>'
+                            corrected_weight = truncate_decimal(corrected_weight)
+                            weight = f'<font color="red">{corrected_weight}</font>' if corrected_weight else ""
                         
                         # ポジション・出身校はCSVのデータをそのまま使用（変更しないので赤字表示不要）
+                    
+                    # 英語名かどうかを判定（アルファベットのみかチェック）
+                    def is_english_name(text):
+                        """テキストが英語名（アルファベットのみ）かどうかを判定"""
+                        if not text or not isinstance(text, str):
+                            return False
+                        # HTMLタグを除去してから判定
+                        import re
+                        text_clean = re.sub(r'<[^>]+>', '', text)
+                        return bool(re.match(r'^[A-Za-z\s\.\-\']+$', text_clean))
+                    
+                    # 英語名の場合は文字数を倍にする
+                    player_name_max = 40 if is_english_name(player_name) else 20
+                    kana_name_max = 40 if is_english_name(kana_name) else 20
+                    department_max = 30 if is_english_name(department) else 15
+                    school_max = 50 if is_english_name(school) else 25
+                    position_max = 12 if is_english_name(position) else 6
                     
                     # 数値系はタグを壊さないようにトリムせずにそのまま出力
                     row_data = [
                         self._truncate_text(no, 10),  # No（10文字まで表示）
-                        self._truncate_text(player_name, 20),  # 選手名（20文字まで表示）
-                        self._truncate_text(kana_name, 20),  # カナ名（20文字まで表示）
-                        self._truncate_text(department, 15),  # 学部（15文字まで表示）
+                        self._truncate_text(player_name, player_name_max),  # 選手名（英語の場合は倍）
+                        self._truncate_text(kana_name, kana_name_max),  # カナ名（英語の場合は倍）
+                        self._truncate_text(department, department_max),  # 学部（英語の場合は倍）
                         self._truncate_text(grade, 3),  # 学年
-                        str(height),  # 身長（小数切り捨て済みをそのまま出力）
-                        str(weight),  # 体重（小数切り捨て済みをそのまま出力）
-                        self._truncate_text(position, 6),  # ポジション
-                        self._truncate_text(school, 25),  # 出身校（25文字まで表示）
+                        str(height) if height else "",  # 身長（空欄の場合は空文字）
+                        str(weight) if weight else "",  # 体重（空欄の場合は空文字）
+                        self._truncate_text(position, position_max),  # ポジション（英語の場合は倍）
+                        self._truncate_text(school, school_max),  # 出身校（英語の場合は倍）
                         status_symbol  # JBA登録状況
                     ]
 
-                    # すべてのセルを Paragraph に変換（<font> を解釈し、日本語フォント適用）
-                    # 特定の列に適切なフォントサイズを適用
+                    # すべてのセルを Paragraph に変換（<font> を解釈し、適切なフォント適用）
+                    # 英語名の場合はHelvetica、日本語の場合は日本語フォントを使用
                     formatted_row_data = []
                     for i, cell in enumerate(row_data):
-                        if i == 0:  # No(0)の列 - 選手名と同じサイズ
-                            formatted_row_data.append(Paragraph(str(cell), small_compact_style))
-                        elif i in [1, 2]:  # 選手名(1)、カナ名(2)の列 - 20文字入るように
-                            formatted_row_data.append(Paragraph(str(cell), small_compact_style))
-                        elif i == 3:  # 学部(3)の列 - 15文字入るように
-                            formatted_row_data.append(Paragraph(str(cell), department_compact_style))
-                        elif i == 8:  # 出身校(8)の列 - 25文字入るように
-                            formatted_row_data.append(Paragraph(str(cell), extra_small_compact_style))
+                        cell_str = str(cell) if cell else ""
+                        # 英語名かどうかを判定（HTMLタグを除去）
+                        import re
+                        cell_clean = re.sub(r'<[^>]+>', '', cell_str)
+                        is_english = bool(re.match(r'^[A-Za-z\s\.\-\']+$', cell_clean)) if cell_clean else False
+                        
+                        # 英語の場合はHelvetica、日本語の場合は日本語フォント
+                        if is_english:
+                            # 英語用スタイル（Helvetica）
+                            english_style = ParagraphStyle(
+                                'EnglishStyle',
+                                parent=styles['Normal'],
+                                fontSize=small_compact_style.fontSize if i in [1, 2] else compact_style.fontSize,
+                                leading=small_compact_style.leading if i in [1, 2] else compact_style.leading,
+                                fontName='Helvetica',
+                                alignment=1  # CENTER
+                            )
+                            formatted_row_data.append(Paragraph(cell_str, english_style))
                         else:
-                            formatted_row_data.append(Paragraph(str(cell), compact_style))
+                            # 日本語用スタイル（既存のスタイルを使用）
+                            if i == 0:  # No(0)の列 - 選手名と同じサイズ
+                                formatted_row_data.append(Paragraph(cell_str, small_compact_style))
+                            elif i in [1, 2]:  # 選手名(1)、カナ名(2)の列
+                                formatted_row_data.append(Paragraph(cell_str, small_compact_style))
+                            elif i == 3:  # 学部(3)の列
+                                formatted_row_data.append(Paragraph(cell_str, department_compact_style))
+                            elif i == 8:  # 出身校(8)の列
+                                formatted_row_data.append(Paragraph(cell_str, extra_small_compact_style))
+                            else:
+                                formatted_row_data.append(Paragraph(cell_str, compact_style))
                     row_data = formatted_row_data
                     
                     data.append(row_data)
@@ -1749,7 +1769,7 @@ class IntegratedTournamentSystem:
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),  # 中央揃えに変更
-                # ヘッダー行はParagraphで作成しているため、FONTNAMEとFONTSIZEは不要
+                # ヘッダー行はParagraphで作成しているため、フォントはParagraph内で設定済み
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 2),  # ヘッダーパディング（final_100_outputと同じ）
                 
                 # データ行
