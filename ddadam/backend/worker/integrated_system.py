@@ -561,7 +561,7 @@ class IntegratedTournamentSystem:
             print(f"❌ エラー: {str(e)}")
             return None
     
-    def process_tournament_data(self, df, university_name=None):
+    def process_tournament_data(self, df, university_name=None, job_id=None, progress_callback=None):
         """大会データをJBA照合で処理（並列処理対応）"""
         
         if df is None or df.empty:
@@ -570,12 +570,12 @@ class IntegratedTournamentSystem:
         
         if self.use_parallel:
             print(f"⚡ 並列処理を使用（{self.max_workers}スレッド）")
-            return self._process_tournament_data_parallel(df, university_name)
+            return self._process_tournament_data_parallel(df, university_name, job_id=job_id, progress_callback=progress_callback)
         else:
             print("🔄 順次処理を使用")
-            return self._process_tournament_data_sequential(df, university_name)
+            return self._process_tournament_data_sequential(df, university_name, job_id=job_id, progress_callback=progress_callback)
     
-    def _process_tournament_data_sequential(self, df, university_name=None):
+    def _process_tournament_data_sequential(self, df, university_name=None, job_id=None, progress_callback=None):
         """順次処理でJBA照合"""
         print("🔍 JBA照合処理を開始...")
         
@@ -583,9 +583,16 @@ class IntegratedTournamentSystem:
         universities = df['大学名'].unique() if '大学名' in df.columns else [university_name or "Unknown"]
         
         all_results = []
+        total_universities = len(universities)
         
-        for univ in universities:
+        for idx, univ in enumerate(universities):
             print(f"🏫 {univ} を処理中...")
+            
+            # 進捗を更新（大学ごと）
+            if progress_callback:
+                progress = idx / total_universities
+                message = f"{univ} を処理中... ({idx+1}/{total_universities})"
+                progress_callback(progress, message)
             
             # 大学のデータを抽出
             if '大学名' in df.columns:
@@ -775,6 +782,12 @@ class IntegratedTournamentSystem:
                 results.append(result)
             
             all_results.extend(results)
+            
+            # 進捗を更新（大学処理完了時）
+            if progress_callback:
+                progress = (idx + 1) / total_universities
+                message = f"{univ} を処理完了 ({idx+1}/{total_universities})"
+                progress_callback(progress, message)
         
         # 結果をコンパクトに表示
         print(f"📊 処理結果: {len(all_results)}選手")
@@ -782,7 +795,7 @@ class IntegratedTournamentSystem:
         
         return all_results
     
-    def _process_tournament_data_parallel(self, df, university_name=None):
+    def _process_tournament_data_parallel(self, df, university_name=None, job_id=None, progress_callback=None):
         """並列処理でJBA照合（大学ごとに最適化）"""
         import concurrent.futures
         import time
@@ -847,13 +860,28 @@ class IntegratedTournamentSystem:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_univ_workers) as executor:
             futures = {executor.submit(process_single_university, univ): univ for univ in universities}
             
+            completed_universities = 0
+            total_universities = len(universities)
+            
             for future in concurrent.futures.as_completed(futures):
                 univ = futures[future]
                 try:
                     univ_results = future.result()
                     all_results.extend(univ_results)
+                    completed_universities += 1
+                    
+                    # 進捗を更新（大学ごと）
+                    if progress_callback:
+                        progress = completed_universities / total_universities
+                        message = f"{univ} を処理完了 ({completed_universities}/{total_universities})"
+                        progress_callback(progress, message)
                 except Exception as e:
                     logger.error(f"❌ {univ} の処理で例外: {e}", exc_info=True)
+                    completed_universities += 1
+                    if progress_callback:
+                        progress = completed_universities / total_universities
+                        message = f"{univ} の処理でエラー ({completed_universities}/{total_universities})"
+                        progress_callback(progress, message)
         
         elapsed_time = time.time() - start_time
         self.performance_stats['total_time'] = elapsed_time

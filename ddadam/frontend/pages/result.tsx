@@ -55,8 +55,8 @@ export default function Result() {
     // 初回実行
     pollJobStatus();
 
-    // 2秒ごとにポーリング
-    intervalId = setInterval(pollJobStatus, 2000);
+    // 0.5秒ごとにポーリング（より細かく更新）
+    intervalId = setInterval(pollJobStatus, 500);
 
     return () => {
       if (intervalId) {

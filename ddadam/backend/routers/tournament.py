@@ -97,14 +97,21 @@ def run_tournament_job(
         current_step = "verification"
         supabase.update_job(job_id, message=f"JBA照合処理中...（{len(universities)}大学）", progress=0.3, metadata={"step": current_step})
         
-        result_df = system.process_tournament_data(combined_df)
+        # 進捗更新用のコールバック関数を渡す
+        def update_progress_callback(progress, message):
+            """進捗更新用のコールバック関数"""
+            # 照合処理の進捗範囲は0.3-0.9（全体の30%-90%）
+            overall_progress = 0.3 + (progress * 0.6)
+            supabase.update_job(job_id, message=message, progress=overall_progress, metadata={"step": current_step})
+        
+        result_df = system.process_tournament_data(combined_df, job_id=job_id, progress_callback=update_progress_callback)
         
         if result_df is None:
             raise Exception("JBA照合処理に失敗しました（内部処理エラー）")
         
         # PDF生成
         current_step = "pdf_generate"
-        supabase.update_job(job_id, message="PDFを生成中...", progress=0.7, metadata={"step": current_step})
+        supabase.update_job(job_id, message="PDFを生成中...", progress=0.9, metadata={"step": current_step})
 
         # PDFの保存先（アプリ用の出力ディレクトリに変更）
         from config import settings
