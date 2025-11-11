@@ -1035,8 +1035,8 @@ class IntegratedTournamentSystem:
             
             # その他の場合（エラーなど）
             else:
-                    result['correction'] = None
-                    result['message'] = verification_result.get('message', '照合できませんでした')
+                result['correction'] = None
+                result['message'] = verification_result.get('message', '照合できませんでした')
                 
                 results.append(result)
             
