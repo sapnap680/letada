@@ -923,7 +923,7 @@ class IntegratedTournamentSystem:
                         # 背番号がある場合のみ身長・体重を照合
                         if player_no:
                             # 身長の照合（5cm以上差があったらJBAの値に変更）
-                        if 'height' in jba_data and jba_data['height']:
+                            if 'height' in jba_data and jba_data['height']:
                                 try:
                                     jba_height_str = str(jba_data['height']).replace('cm', '').strip()
                                     # 値が空、0.0、nanの場合は空欄のまま
