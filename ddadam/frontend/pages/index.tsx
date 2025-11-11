@@ -65,107 +65,160 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-2xl">
+    <main className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-lg shadow-xl p-8">
           {/* ヘッダー */}
-          <div className="text-center mb-12">
-            <h1 className="text-5xl sm:text-6xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-              JBA照合システム
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2 text-gray-800">
+              🏀 JBA照合・PDF生成システム
             </h1>
+            <p className="text-gray-600">
+              大会IDを入力して、全大学のCSVを自動取得・JBA照合・PDF生成
+            </p>
           </div>
 
-          {/* フォームカード */}
-          <div className="bg-slate-800/50 backdrop-blur-lg rounded-2xl shadow-2xl border border-slate-700/50 p-8 sm:p-10">
-            {/* 大会ID入力 */}
-            <div className="mb-8">
-              <label className="block text-lg font-semibold mb-4 text-slate-300 uppercase tracking-wide">
-                大会ID
-              </label>
+          {/* 大会ID入力 */}
+          <div className="mb-6">
+            <label className="block text-lg font-semibold mb-4 text-gray-700">
+              🏆 大会ID
+            </label>
+            <input
+              type="text"
+              placeholder="例: 12345"
+              value={gameId}
+              onChange={(e) => setGameId(e.target.value)}
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              JBA管理画面のURL内にある数字です（例: game_category_id/12345）
+            </p>
+          </div>
+
+          {/* JBAログイン情報 */}
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-700">
+              🔐 JBAログイン情報
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
-                type="text"
-                placeholder="例: 12345"
-                value={gameId}
-                onChange={(e) => setGameId(e.target.value)}
-                className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-6 py-6 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-xl"
+                type="email"
+                placeholder="JBAメールアドレス"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <input
+                type="password"
+                placeholder="JBAパスワード"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
+          </div>
 
-            {/* JBAログイン情報 */}
-            <div className="mb-8">
-              <label className="block text-lg font-semibold mb-4 text-slate-300 uppercase tracking-wide">
-                JBAログイン情報
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input
-                  type="email"
-                  placeholder="JBAメールアドレス"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-6 py-6 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-xl"
-                />
-                <input
-                  type="password"
-                  placeholder="JBAパスワード"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-600 rounded-xl px-6 py-6 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-xl"
-                />
+          {/* エラー表示 */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              ❌ {error}
+            </div>
+          )}
+
+          {/* 実行ボタン */}
+          <button
+            onClick={handleStart}
+            disabled={loading}
+            className={`w-full py-4 px-6 rounded-lg font-bold text-white text-lg transition-all ${
+              loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-xl"
+            }`}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                処理中...
+              </span>
+            ) : (
+              "🚀 大会CSVを取得して照合開始"
+            )}
+          </button>
+
+          {/* 説明 */}
+          <div className="mt-8 p-4 bg-purple-50 rounded-lg">
+            <h3 className="font-semibold text-purple-900 mb-2">💡 使い方</h3>
+            <ol className="list-decimal list-inside text-sm text-purple-800 space-y-1">
+              <li>JBA管理画面で大会IDを確認（URLから取得）</li>
+              <li>上記フォームに大会IDを入力</li>
+              <li>JBAログイン情報（メール・パスワード）を入力</li>
+              <li>「大会CSVを取得して照合開始」をクリック</li>
+              <li>進捗画面で処理状況を確認</li>
+              <li>完了後、PDFをダウンロード</li>
+            </ol>
+          </div>
+
+          {/* 処理フロー */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-semibold text-gray-900 mb-2">📋 処理フロー</h3>
+            <div className="text-sm text-gray-700 space-y-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-purple-600 font-bold">1.</span>
+                <span>JBAにログイン</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-purple-600 font-bold">2.</span>
+                <span>大会ページから全CSVリンクを取得</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-purple-600 font-bold">3.</span>
+                <span>各大学のCSVを自動ダウンロード</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-purple-600 font-bold">4.</span>
+                <span>全大学のデータをJBA照合</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-purple-600 font-bold">5.</span>
+                <span>訂正箇所を赤字で表示したPDFを生成</span>
               </div>
             </div>
-
-            {/* エラー表示 */}
-            {error && (
-              <div className="mb-6 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 backdrop-blur-sm">
-                <div className="flex items-center">
-                  <span className="mr-2">❌</span>
-                  <span>{error}</span>
-                </div>
-              </div>
-            )}
-
-            {/* 実行ボタン */}
-            <button
-              onClick={handleStart}
-              disabled={loading}
-              className={`w-full py-6 px-8 rounded-xl font-bold text-white text-2xl transition-all transform ${
-                loading
-                  ? "bg-slate-600 cursor-not-allowed"
-                  : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-lg hover:shadow-purple-500/50 hover:scale-[1.02] active:scale-[0.98]"
-              }`}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  処理中...
-                </span>
-              ) : (
-                <span className="flex items-center justify-center">
-                  <span className="mr-2">🚀</span>
-                  大会CSVを取得して照合開始
-                </span>
-              )}
-            </button>
           </div>
+
+          {/* 注意事項 */}
+          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="font-semibold text-yellow-900 mb-2">⚠️ 注意事項</h3>
+            <ul className="list-disc list-inside text-sm text-yellow-800 space-y-1">
+              <li>大会IDはJBA管理画面のURLから確認できます</li>
+              <li>処理時間は大学数によって変わります（5〜30分程度）</li>
+              <li>進捗画面で処理状況をリアルタイム確認できます</li>
+              <li>JBAと異なる情報は赤字で表示されます</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* フッター */}
+        <div className="text-center mt-8 text-gray-600 text-sm">
+          <p>Powered by FastAPI + Next.js | v2.0.0</p>
         </div>
       </div>
     </main>
