@@ -87,7 +87,7 @@ export default function Home() {
                 placeholder="例: 12345"
                 value={gameId}
                 onChange={(e) => setGameId(e.target.value)}
-                className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-8 py-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-2xl font-medium"
+                className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-24 py-24 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-6xl font-medium"
               />
             </div>
 
@@ -102,14 +102,14 @@ export default function Home() {
                   placeholder="JBAメールアドレス"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-8 py-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-2xl font-medium"
+                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-24 py-24 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-6xl font-medium"
                 />
                 <input
                   type="password"
                   placeholder="JBAパスワード"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-8 py-8 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-2xl font-medium"
+                  className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-24 py-24 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-6xl font-medium"
                 />
               </div>
             </div>
@@ -128,7 +128,7 @@ export default function Home() {
             <button
               onClick={handleStart}
               disabled={loading}
-              className={`w-full py-10 px-8 rounded-2xl font-black text-white text-3xl transition-all transform shadow-xl ${
+              className={`w-full py-[120px] px-24 rounded-2xl font-black text-white text-7xl transition-all transform shadow-xl ${
                 loading
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:scale-[1.01] active:scale-[0.99] hover:shadow-2xl"
@@ -137,7 +137,7 @@ export default function Home() {
               {loading ? (
                 <span className="flex items-center justify-center">
                   <svg
-                    className="animate-spin -ml-1 mr-4 h-8 w-8 text-white"
+                    className="animate-spin -ml-1 mr-4 h-24 w-24 text-white"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -160,7 +160,7 @@ export default function Home() {
                 </span>
               ) : (
                 <span className="flex items-center justify-center">
-                  <span className="mr-3 text-3xl">🚀</span>
+                  <span className="mr-3 text-7xl">🚀</span>
                   大会CSVを取得して照合開始
                 </span>
               )}
