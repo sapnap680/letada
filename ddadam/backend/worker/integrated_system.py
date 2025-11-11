@@ -757,7 +757,7 @@ class IntegratedTournamentSystem:
                                 text = td.get_text(strip=True)
                                 if "大学" in text and len(text) < 50:
                                     university_name = text
-                                    break
+                                        break
                             
                             if not university_name:
                                 university_name = f"大学_{i+1}"
@@ -794,7 +794,7 @@ class IntegratedTournamentSystem:
                     
                     # 大学名を追加（既に追加済みの場合はスキップ）
                     if '大学名' not in df.columns:
-                        df['大学名'] = university_name
+                    df['大学名'] = university_name
                     
                     all_universities_data.append(df)
                     print(f"  ✅ {university_name} 取得成功: {len(df)} 行")
@@ -923,7 +923,7 @@ class IntegratedTournamentSystem:
                         # 背番号がある場合のみ身長・体重を照合
                         if player_no:
                             # 身長の照合（5cm以上差があったらJBAの値に変更）
-                            if 'height' in jba_data and jba_data['height']:
+                        if 'height' in jba_data and jba_data['height']:
                                 try:
                                     jba_height_str = str(jba_data['height']).replace('cm', '').strip()
                                     # 値が空、0.0、nanの場合は空欄のまま
@@ -945,7 +945,7 @@ class IntegratedTournamentSystem:
                                     pass
                             
                             # 体重の照合（5kg以上差があったらJBAの値に変更）
-                            if 'weight' in jba_data and jba_data['weight']:
+                        if 'weight' in jba_data and jba_data['weight']:
                                 try:
                                     jba_weight_str = str(jba_data['weight']).replace('kg', '').strip()
                                     # 値が空、0.0、nanの場合は空欄のまま
@@ -958,7 +958,7 @@ class IntegratedTournamentSystem:
                                             if weight_diff >= 5.0:
                                                 corrected_data['体重'] = f"{jba_weight}kg"
                                                 changed_fields.add('体重')
-                                        else:
+                            else:
                                             # CSVに体重がない場合はJBAの値を使用
                                             corrected_data['体重'] = f"{jba_weight}kg"
                                             changed_fields.add('体重')
@@ -1027,8 +1027,8 @@ class IntegratedTournamentSystem:
                 else:
                     result['correction'] = None
                     result['message'] = 'JBA登録あり（〇）'
-                
-                # JBA登録なし（×）の場合
+            
+            # JBA登録なし（×）の場合
             elif verification_result['status'] == 'not_found':
                 result['correction'] = None
                 result['message'] = 'JBA登録なし（×）'
@@ -1214,21 +1214,21 @@ class IntegratedTournamentSystem:
             name_col = available_name_cols[0]
             univ_df[name_col] = univ_df[name_col].astype(str).str.strip()
             valid_players = univ_df[pd.notna(univ_df[name_col]) & (univ_df[name_col] != '')]
-            
-            for index, row in valid_players.iterrows():
-                player_name = str(row[name_col]).strip()
-                if player_name:
-                    player_data.append((index, row, univ, player_name))
+                
+                for index, row in valid_players.iterrows():
+                    player_name = str(row[name_col]).strip()
+                    if player_name:
+                        player_data.append((index, row, univ, player_name))
         else:
             # フォールバック
             for index, row in univ_df.iterrows():
-                player_name = None
-                for col in name_columns:
+                    player_name = None
+                    for col in name_columns:
                     if col in univ_df.columns and pd.notna(row[col]):
-                        player_name = str(row[col]).strip()
-                        break
-                if player_name:
-                    player_data.append((index, row, univ, player_name))
+                            player_name = str(row[col]).strip()
+                            break
+                    if player_name:
+                        player_data.append((index, row, univ, player_name))
         
         if not player_data:
             return []
@@ -1390,7 +1390,7 @@ class IntegratedTournamentSystem:
                 # 背番号がある場合のみ身長・体重を照合
                 if player_no:
                     # 身長の照合（5cm以上差があったらJBAの値に変更）
-                    if 'height' in jba_data and jba_data['height']:
+                if 'height' in jba_data and jba_data['height']:
                         try:
                             jba_height_str = str(jba_data['height']).replace('cm', '').strip()
                             # 値が空、0.0、nanの場合は空欄のまま
@@ -1425,7 +1425,7 @@ class IntegratedTournamentSystem:
                                     if weight_diff >= 5.0:
                                         corrected_data['体重'] = f"{jba_weight}kg"
                                         changed_fields.add('体重')
-                                else:
+            else:
                                     # CSVに体重がない場合はJBAの値を使用
                                     corrected_data['体重'] = f"{jba_weight}kg"
                                     changed_fields.add('体重')
@@ -1489,7 +1489,7 @@ class IntegratedTournamentSystem:
                 # 変更されたフィールド情報を保存
                 result['changed_fields'] = changed_fields
             
-                result['correction'] = corrected_data
+            result['correction'] = corrected_data
                 result['message'] = 'JBA登録あり（〇）'
             else:
                 result['correction'] = None
@@ -2430,4 +2430,4 @@ if __name__ == "__main__":
         else:
             print("\nテスト失敗")
     else:
-        main()
+    main()
