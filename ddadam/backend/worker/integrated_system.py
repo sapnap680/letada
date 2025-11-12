@@ -1341,8 +1341,8 @@ class IntegratedTournamentSystem:
             # CSVの順番を保持するため、indexでソート
             univ_results.sort(key=lambda x: x.get('index', 0))
             
-            # 重複チェック: 同じ大学名、同じ選手名の組み合わせで重複をチェック
-            # 背番号がある方を優先（選手として扱う）
+            # 重複チェック: 同じ大学名、同じ選手名、同じ種類（選手/スタッフ）の組み合わせで重複をチェック
+            # 選手（背番号あり）とスタッフ（背番号なし）は別々のものとして扱う
             seen_players = {}
             deduplicated_results = []
             
@@ -1356,36 +1356,25 @@ class IntegratedTournamentSystem:
                     deduplicated_results.append(result)
                     continue
                 
-                # 同じ大学名、同じ選手名の組み合わせで重複をチェック
-                key = (univ, player_name)
+                # 選手（背番号あり）とスタッフ（背番号なし）を区別するため、
+                # キーに背番号の有無を含める
+                has_player_no = player_no is not None
+                key = (univ, player_name, has_player_no)
                 
                 if key in seen_players:
-                    # 重複が見つかった場合、背番号がある方を優先
+                    # 重複が見つかった場合（同じ大学名、同じ選手名、同じ種類）
+                    # 最初に見つかった方を保持（indexが小さい方）
                     existing_result = seen_players[key]
-                    existing_player_no = existing_result.get('player_no')
-                    
-                    # 現在のレコードに背番号があり、既存のレコードに背番号がない場合
-                    if player_no and not existing_player_no:
-                        # 既存のレコードを削除して、現在のレコードを追加
+                    if result.get('index', 0) < existing_result.get('index', 0):
+                        # 現在のレコードの方がindexが小さい場合は、既存のレコードを置き換え
                         deduplicated_results.remove(existing_result)
                         deduplicated_results.append(result)
                         seen_players[key] = result
-                    # 既存のレコードに背番号があり、現在のレコードに背番号がない場合
-                    elif existing_player_no and not player_no:
-                        # 現在のレコードをスキップ（既存のレコードを保持）
-                        continue
-                    # 両方に背番号がある、または両方に背番号がない場合
+                    # 既存のレコードの方がindexが小さい場合は、現在のレコードをスキップ
                     else:
-                        # 最初に見つかった方を保持（indexが小さい方）
-                        if result.get('index', 0) < existing_result.get('index', 0):
-                            deduplicated_results.remove(existing_result)
-                            deduplicated_results.append(result)
-                            seen_players[key] = result
-                        # 既存のレコードを保持
-                        else:
-                            continue
+                        continue
                 else:
-                    # 重複がない場合は追加
+                    # 重複がない場合は追加（選手とスタッフは別々のものとして扱われる）
                     deduplicated_results.append(result)
                     seen_players[key] = result
             

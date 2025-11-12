@@ -814,11 +814,26 @@ class JBAVerificationSystem:
                             
                             # カナ名も照合（JBAデータの氏名カナと照合）
                             kana_similarity = 0.0
+                            has_kana_name = False
                             if kana_name and member.get("kana_name"):
                                 kana_similarity = self.calculate_similarity(kana_name, member.get("kana_name", ""))
+                                has_kana_name = True
                             
-                            # 名前またはカナ名の類似度の最大値を計算
-                            max_similarity = max(name_similarity, kana_similarity)
+                            # 名前とカナ名の両方が閾値を超えた場合のみマッチ
+                            # カナ名がない場合は名前のみで判定
+                            if has_kana_name:
+                                # カナ名がある場合：名前とカナ名の両方が閾値を超えた場合のみマッチ
+                                if name_similarity >= threshold and kana_similarity >= threshold:
+                                    max_similarity = max(name_similarity, kana_similarity)
+                                else:
+                                    # どちらかが閾値を超えていない場合はスキップ
+                                    continue
+                            else:
+                                # カナ名がない場合：名前のみで判定
+                                max_similarity = name_similarity
+                                if max_similarity < threshold:
+                                    # 名前が閾値を超えていない場合はスキップ
+                                    continue
                             
                             # 閾値を超える場合は候補として追加
                             if max_similarity >= threshold:
