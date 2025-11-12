@@ -419,11 +419,21 @@ class JBAVerificationSystem:
                                 if detail_link.startswith('/'):
                                     detail_link = f"https://team-jba.jp{detail_link}"
                             
+                            # 登録状態を取得（3番目以降のセルから探す）
+                            registration_status = None
+                            for i in range(2, len(cells)):
+                                cell_text = cells[i].get_text(strip=True)
+                                # 「無所属」「登録完了」などの登録状態を探す
+                                if cell_text and ('無所属' in cell_text or '登録' in cell_text or '実績' in cell_text):
+                                    registration_status = cell_text
+                                    break
+                            
                             members.append({
                                 "member_id": member_id,
                                 "name": name,
                                 "birth_date": birth_date,
-                                "detail_url": detail_link
+                                "detail_url": detail_link,
+                                "registration_status": registration_status
                             })
 
             return {
@@ -482,6 +492,7 @@ class JBAVerificationSystem:
                             grade = ""
                             height = ""
                             weight = ""
+                            registration_status = None
                             
                             for i, cell in enumerate(cells):
                                 cell_text = cell.get_text(strip=True)
@@ -499,6 +510,10 @@ class JBAVerificationSystem:
                                     height = cell_text
                                 elif 'kg' in cell_text:
                                     weight = cell_text
+                                
+                                # 登録状態を探す（「無所属」「登録完了」など）
+                                if cell_text and ('無所属' in cell_text or '登録' in cell_text or '実績' in cell_text):
+                                    registration_status = cell_text
                             
                             members.append({
                                 "name": player_name,
@@ -506,7 +521,8 @@ class JBAVerificationSystem:
                                 "grade": grade,
                                 "height": height,
                                 "weight": weight,
-                                "detail_url": detail_url
+                                "detail_url": detail_url,
+                                "registration_status": registration_status
                             })
             
             # 最終結果をログに記録（メンバーが0人の場合のみ警告）
@@ -799,16 +815,23 @@ class JBAVerificationSystem:
                                 logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 名前類似度: {name_similarity:.3f}, カナ類似度: {kana_similarity:.3f}")
                                 
                                 # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
+                                # チームページから取得した登録状態を保持（最優先）
+                                team_registration_status = member.get("registration_status")
+                                
                                 if get_details and member.get("detail_url"):
                                     try:
                                         if player_no:
-                                            # 背番号がある場合は身長・体重・学年・登録状態を取得
-                                            fields = ['height', 'weight', 'grade', 'registration_status']
+                                            # 背番号がある場合は身長・体重・学年・カナ名を取得（登録状態はチームページから取得）
+                                            fields = ['height', 'weight', 'grade', 'kana_name']
                                         else:
-                                            # 背番号がない場合はカナ名も取得（照合に使用）
-                                            fields = ['kana_name', 'registration_status']
+                                            # 背番号がない場合はカナ名も取得（照合に使用、登録状態はチームページから取得）
+                                            fields = ['kana_name']
                                         player_details = self.get_player_details(member["detail_url"], fields=fields)
                                         member.update(player_details)
+                                        
+                                        # チームページから取得した登録状態を常に優先
+                                        if team_registration_status:
+                                            member["registration_status"] = team_registration_status
                                     except Exception as detail_error:
                                         logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
                                 

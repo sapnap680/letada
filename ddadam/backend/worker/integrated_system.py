@@ -17,6 +17,7 @@ from datetime import datetime
 import json
 import uuid
 import multiprocessing
+import unicodedata
 # オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
 pdf_worker_main = None
 try:
@@ -740,6 +741,8 @@ class IntegratedTournamentSystem:
                         # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
                         if 'name' in jba_data and jba_data['name']:
                             jba_name = str(jba_data['name']).strip()
+                            # 全角スペースを半角スペースに統一
+                            jba_name = unicodedata.normalize('NFKC', jba_name)
                             csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
                             # 編集ページから取得した選手名かチェック（優先して上書きしない）
                             is_edited_from_html = False
@@ -753,6 +756,8 @@ class IntegratedTournamentSystem:
                         
                         if 'kana_name' in jba_data and jba_data['kana_name']:
                             jba_kana = str(jba_data['kana_name']).strip()
+                            # 全角スペースを半角スペースに統一
+                            jba_kana = unicodedata.normalize('NFKC', jba_kana)
                             csv_kana = str(corrected_data.get('カナ名', '')).strip()
                             if jba_kana != csv_kana:
                                 corrected_data['カナ名'] = jba_kana
@@ -1220,6 +1225,8 @@ class IntegratedTournamentSystem:
                 # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
                 if 'name' in jba_data and jba_data['name']:
                     jba_name = str(jba_data['name']).strip()
+                    # 全角スペースを半角スペースに統一
+                    jba_name = unicodedata.normalize('NFKC', jba_name)
                     csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
                     # 編集ページから取得した選手名かチェック（優先して上書きしない）
                     is_edited_from_html = False
@@ -1233,6 +1240,8 @@ class IntegratedTournamentSystem:
                 
                 if 'kana_name' in jba_data and jba_data['kana_name']:
                     jba_kana = str(jba_data['kana_name']).strip()
+                    # 全角スペースを半角スペースに統一
+                    jba_kana = unicodedata.normalize('NFKC', jba_kana)
                     csv_kana = str(corrected_data.get('カナ名', '')).strip()
                     if jba_kana != csv_kana:
                         corrected_data['カナ名'] = jba_kana
@@ -1703,7 +1712,7 @@ class IntegratedTournamentSystem:
                         grade = grade_truncated
                     
                     # ステータス記号の設定（登録状態チェックを最優先）
-                    # 登録状態が「登録完了」以外の場合は、JBAステータスを△にする（最優先）
+                    # 登録状態が「登録完了」以外、または取得できない場合は、JBAステータスを△にする（最優先）
                     # まずJBA照合結果から登録状態を取得してチェック
                     jba_registration_status = None
                     verification_result = r.get("verification_result", {})
@@ -1717,17 +1726,20 @@ class IntegratedTournamentSystem:
                                 if registration_status_raw is not None and str(registration_status_raw).strip():
                                     jba_registration_status = str(registration_status_raw).strip()
                     
-                    # 登録状態が取得できて、かつ「登録完了」以外の場合は△にする（最優先）
-                    if jba_registration_status and jba_registration_status.strip() != "登録完了":
-                        status_symbol = "△"
-                    else:
-                        # 登録状態が「登録完了」または取得できない場合は、JBAの照合結果に基づいて設定
-                        if status == "match":
+                    # JBA照合でmatchした場合の処理
+                    if status == "match":
+                        # 登録状態が取得できて、かつ「登録完了」の場合のみ〇
+                        if jba_registration_status and jba_registration_status.strip() == "登録完了":
                             status_symbol = "〇"
-                        elif status == "not_found":
-                            status_symbol = "×"
                         else:
-                            status_symbol = "-"
+                            # 登録状態が「登録完了」以外、または取得できない場合は△
+                            status_symbol = "△"
+                    elif status == "not_found":
+                        # JBA照合で見つからなかった場合は×
+                        status_symbol = "×"
+                    else:
+                        # その他の場合は-
+                        status_symbol = "-"
                     
                     # 変更があった場合は赤字で表示（changed_fieldsを使用）
                     if r.get("correction"):
