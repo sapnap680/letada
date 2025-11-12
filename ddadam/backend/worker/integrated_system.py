@@ -1702,44 +1702,22 @@ class IntegratedTournamentSystem:
                     else:
                         grade = grade_truncated
                     
-                    # ステータス記号の設定（学年チェックを優先）
-                    # JBA照合で取得した学年が一桁でない場合は、JBAステータスを△にする（最優先）
-                    # まずJBA照合結果から学年を取得してチェック
-                    jba_grade = None
+                    # ステータス記号の設定（登録状態チェックを優先）
+                    # 登録状態が「登録完了」以外の場合は、JBAステータスを△にする（最優先）
+                    # まずJBA照合結果から登録状態を取得してチェック
+                    jba_registration_status = None
                     verification_result = r.get("verification_result", {})
                     if verification_result and verification_result.get("status") == "match":
                         jba_data = verification_result.get("jba_data", {})
-                        if jba_data and "grade" in jba_data and jba_data["grade"]:
-                            jba_grade_str = str(jba_data["grade"]).strip()
-                            # 空文字列や"None"などの無効な値を除外
-                            if jba_grade_str and jba_grade_str.lower() not in ['', 'none', 'null', 'nan']:
-                                jba_grade = jba_grade_str
+                        if jba_data and "registration_status" in jba_data and jba_data["registration_status"]:
+                            jba_registration_status = str(jba_data["registration_status"]).strip()
                     
-                    # JBA照合で取得した学年が一桁でない場合は△にする
-                    if jba_grade:
-                        jba_grade_num_match = re.search(r'(\d+)', jba_grade)
-                        if jba_grade_num_match:
-                            jba_grade_num = int(jba_grade_num_match.group(1))
-                            if not (1 <= jba_grade_num <= 9):
-                                status_symbol = "△"
-                            else:
-                                # JBA学年が一桁の場合は、JBAの照合結果に基づいて設定
-                                if status == "match":
-                                    status_symbol = "〇"
-                                elif status == "not_found":
-                                    status_symbol = "×"
-                                else:
-                                    status_symbol = "-"
-                        else:
-                            # JBA学年に数値が含まれていない場合もJBAの照合結果に基づいて設定
-                            if status == "match":
-                                status_symbol = "〇"
-                            elif status == "not_found":
-                                status_symbol = "×"
-                            else:
-                                status_symbol = "-"
+                    # 登録状態が「登録完了」以外の場合は△にする（最優先）
+                    # 先頭・末尾の空白を除去して比較
+                    if jba_registration_status and jba_registration_status.strip() != "登録完了":
+                        status_symbol = "△"
                     else:
-                        # JBA学年が取得できない場合は、JBAの照合結果に基づいて設定（従来通り）
+                        # 登録状態が「登録完了」または取得できない場合は、JBAの照合結果に基づいて設定
                         if status == "match":
                             status_symbol = "〇"
                         elif status == "not_found":

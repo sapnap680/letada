@@ -554,6 +554,7 @@ class JBAVerificationSystem:
             need_school = fields is None or 'school' in fields
             need_uniform = fields is None or 'uniform_number' in fields
             need_kana_name = fields is None or 'kana_name' in fields
+            need_registration_status = fields is None or 'registration_status' in fields
             
             # 身長・体重情報を探す（必要な場合のみ）
             height_patterns = [
@@ -611,6 +612,10 @@ class JBAVerificationSystem:
                         # 氏名カナ（必要な場合のみ）
                         elif need_kana_name and ('氏名カナ' in label or 'カナ名' in label or 'フリガナ' in label or 'ふりがな' in label):
                             player_details['kana_name'] = value
+                        
+                        # 登録状態（必要な場合のみ）
+                        elif need_registration_status and ('登録状態' in label or '登録ステータス' in label or 'Registration Status' in label or 'Status' in label):
+                            player_details['registration_status'] = value
             
             # テーブルで見つからない場合は、ページ全体から正規表現で検索（必要な場合のみ）
             if need_height and 'height' not in player_details:
@@ -797,11 +802,11 @@ class JBAVerificationSystem:
                                 if get_details and member.get("detail_url"):
                                     try:
                                         if player_no:
-                                            # 背番号がある場合は身長・体重・学年を取得
-                                            fields = ['height', 'weight', 'grade']
+                                            # 背番号がある場合は身長・体重・学年・登録状態を取得
+                                            fields = ['height', 'weight', 'grade', 'registration_status']
                                         else:
                                             # 背番号がない場合はカナ名も取得（照合に使用）
-                                            fields = ['kana_name']
+                                            fields = ['kana_name', 'registration_status']
                                         player_details = self.get_player_details(member["detail_url"], fields=fields)
                                         member.update(player_details)
                                     except Exception as detail_error:
