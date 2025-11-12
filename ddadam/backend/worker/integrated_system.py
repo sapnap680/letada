@@ -269,8 +269,11 @@ class IntegratedTournamentSystem:
             tables = soup.find_all("table")
             
             # 「?」を含む選手名から比較用の文字列を生成
-            # 例: "?本 晴暖" -> "本 晴暖"
+            # 例: "島? 輝" -> "島 輝"（?を除く）
             question_cleaned = player_name_with_question.replace('?', '').strip()
+            
+            # 候補を収集（より厳密なマッチングのため）
+            candidates = []
             
             for table in tables:
                 rows = table.find_all("tr")
@@ -291,25 +294,44 @@ class IntegratedTournamentSystem:
                         
                         # 選手名が取得できた場合、マッチングを試みる
                         if player_name_from_edit:
-                            # 方法1: 「?」を除いた部分が正しい名前に含まれるか
-                            if question_cleaned and question_cleaned in player_name_from_edit:
+                            # 方法1: 「?」を除いた部分が正しい名前に完全一致するか（最も厳密）
+                            if question_cleaned == player_name_from_edit:
                                 return player_name_from_edit
                             
-                            # 方法2: 名前の後半部分（名字の後）が一致するか
-                            # 例: "?本 晴暖" と "栁本 晴暖" -> " 晴暖" が一致
+                            # 方法2: 名前の後半部分（名字の後）が完全一致するか
+                            # 例: "島? 輝" と "島 輝" -> " 輝" が一致
                             if ' ' in question_cleaned:
                                 parts = question_cleaned.split(' ', 1)
                                 if len(parts) == 2:
-                                    last_part = parts[1]  # "晴暖"
+                                    last_part = parts[1]  # "輝"
                                     if ' ' in player_name_from_edit:
                                         correct_parts = player_name_from_edit.split(' ', 1)
                                         if len(correct_parts) == 2 and correct_parts[1] == last_part:
-                                            return player_name_from_edit
+                                            # 名字部分の文字数が同じか、1文字差以内の場合のみ候補に追加
+                                            if abs(len(parts[0]) - len(correct_parts[0])) <= 1:
+                                                candidates.append(player_name_from_edit)
                             
-                            # 方法3: 文字数が同じで、最初の文字以外が一致するか
+                            # 方法3: 文字数が同じで、最初の文字以外が完全一致するか
                             if len(question_cleaned) == len(player_name_from_edit):
                                 if question_cleaned[1:] == player_name_from_edit[1:]:
-                                    return player_name_from_edit
+                                    candidates.append(player_name_from_edit)
+            
+            # 候補が1つだけの場合はそれを返す（複数ある場合は返さない）
+            if len(candidates) == 1:
+                return candidates[0]
+            
+            # 候補が複数ある場合は、最も類似度が高いものを返す（ただし1.0のみ）
+            if len(candidates) > 1:
+                from difflib import SequenceMatcher
+                best_match = None
+                best_similarity = 0.0
+                for candidate in candidates:
+                    similarity = SequenceMatcher(None, question_cleaned, candidate).ratio()
+                    if similarity > best_similarity and similarity >= 1.0:
+                        best_similarity = similarity
+                        best_match = candidate
+                if best_match:
+                    return best_match
             
             return None
         except Exception:
@@ -1316,10 +1338,64 @@ class IntegratedTournamentSystem:
         reports = {}
         
         for univ, univ_results in universities.items():
+            # CSVの順番を保持するため、indexでソート
+            univ_results.sort(key=lambda x: x.get('index', 0))
+            
+            # 重複チェック: 同じ大学名、同じ選手名の組み合わせで重複をチェック
+            # 背番号がある方を優先（選手として扱う）
+            seen_players = {}
+            deduplicated_results = []
+            
+            for result in univ_results:
+                original_data = result.get('original_data', {})
+                player_name = str(original_data.get('選手名', original_data.get('氏名', ''))).strip()
+                player_no = result.get('player_no')  # 背番号（数字のみ有効）
+                
+                # 選手名が空の場合はスキップ
+                if not player_name:
+                    deduplicated_results.append(result)
+                    continue
+                
+                # 同じ大学名、同じ選手名の組み合わせで重複をチェック
+                key = (univ, player_name)
+                
+                if key in seen_players:
+                    # 重複が見つかった場合、背番号がある方を優先
+                    existing_result = seen_players[key]
+                    existing_player_no = existing_result.get('player_no')
+                    
+                    # 現在のレコードに背番号があり、既存のレコードに背番号がない場合
+                    if player_no and not existing_player_no:
+                        # 既存のレコードを削除して、現在のレコードを追加
+                        deduplicated_results.remove(existing_result)
+                        deduplicated_results.append(result)
+                        seen_players[key] = result
+                    # 既存のレコードに背番号があり、現在のレコードに背番号がない場合
+                    elif existing_player_no and not player_no:
+                        # 現在のレコードをスキップ（既存のレコードを保持）
+                        continue
+                    # 両方に背番号がある、または両方に背番号がない場合
+                    else:
+                        # 最初に見つかった方を保持（indexが小さい方）
+                        if result.get('index', 0) < existing_result.get('index', 0):
+                            deduplicated_results.remove(existing_result)
+                            deduplicated_results.append(result)
+                            seen_players[key] = result
+                        # 既存のレコードを保持
+                        else:
+                            continue
+                else:
+                    # 重複がない場合は追加
+                    deduplicated_results.append(result)
+                    seen_players[key] = result
+            
+            # 重複除去後の結果をindexでソート（順番を保持）
+            deduplicated_results.sort(key=lambda x: x.get('index', 0))
+            
             # 統計情報を計算
-            total_players = len(univ_results)
-            match_count = len([r for r in univ_results if r['status'] == 'match'])
-            not_found_count = len([r for r in univ_results if r['status'] == 'not_found'])
+            total_players = len(deduplicated_results)
+            match_count = len([r for r in deduplicated_results if r['status'] == 'match'])
+            not_found_count = len([r for r in deduplicated_results if r['status'] == 'not_found'])
             
             # レポートデータを作成
             report_data = {
@@ -1328,7 +1404,7 @@ class IntegratedTournamentSystem:
                 'match_count': match_count,
                 'not_found_count': not_found_count,
                 'match_rate': (match_count / total_players * 100) if total_players > 0 else 0,
-                'results': univ_results
+                'results': deduplicated_results
             }
             
             reports[univ] = report_data
@@ -1613,8 +1689,9 @@ class IntegratedTournamentSystem:
             elements.append(Paragraph(univ_header, compact_style))
             elements.append(Spacer(1, 1))  # スペースを最小限に
             
-            # 選手データをページング
+            # 選手データをページング（CSVの順番を保持するため、indexでソート）
             results = report["results"]
+            results.sort(key=lambda x: x.get('index', 0))
             total_pages = (len(results) + max_rows_per_page - 1) // max_rows_per_page
             
             for page_num in range(total_pages):
@@ -1739,13 +1816,21 @@ class IntegratedTournamentSystem:
                         grade = grade_truncated
                     
                     # ステータス記号の設定（登録状態チェックを最優先）
-                    # 登録状態が「登録完了」以外、または取得できない場合は、JBAステータスを△にする（最優先）
-                    # まずJBA照合結果から登録状態を取得してチェック
+                    # 構成員区分を考慮して登録状態を確認
+                    # 選手（背番号あり）は「競技者」の登録状態を確認
+                    # スタッフ（背番号なし）は「競技者」以外の登録状態を確認（競技者は絶対見ない）
                     jba_registration_status = None
+                    jba_member_category = None
                     verification_result = r.get("verification_result", {})
                     if verification_result and verification_result.get("status") == "match":
                         jba_data = verification_result.get("jba_data", {})
                         if jba_data:
+                            # 構成員区分を取得
+                            if "member_category" in jba_data:
+                                member_category_raw = jba_data["member_category"]
+                                if member_category_raw is not None and str(member_category_raw).strip():
+                                    jba_member_category = str(member_category_raw).strip()
+                            
                             # 登録状態が存在するかチェック（空文字列やNoneも含む）
                             if "registration_status" in jba_data:
                                 registration_status_raw = jba_data["registration_status"]
@@ -1753,10 +1838,38 @@ class IntegratedTournamentSystem:
                                 if registration_status_raw is not None and str(registration_status_raw).strip():
                                     jba_registration_status = str(registration_status_raw).strip()
                     
+                    # CSVの背番号の有無で選手かスタッフかを判断
+                    csv_player_no = None
+                    no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+                    for col in no_columns:
+                        if col in d and pd.notna(d[col]):
+                            value = str(d[col]).strip()
+                            if value.isdigit() or ('.' in value and value.replace('.', '').isdigit() and value.count('.') == 1):
+                                csv_player_no = value
+                                break
+                    
                     # JBA照合でmatchした場合の処理
                     if status == "match":
-                        # 登録状態が取得できて、かつ「登録完了」の場合のみ〇
-                        if jba_registration_status and jba_registration_status.strip() == "登録完了":
+                        # 構成員区分を考慮して登録状態を確認
+                        is_valid_registration = False
+                        
+                        if csv_player_no:
+                            # 選手の場合：構成員区分が「競技者」の登録状態を確認
+                            if jba_member_category and "競技者" in jba_member_category:
+                                if jba_registration_status and jba_registration_status.strip() == "登録完了":
+                                    is_valid_registration = True
+                        else:
+                            # スタッフの場合：構成員区分が「競技者」以外の登録状態を確認（競技者は絶対見ない）
+                            if jba_member_category and "競技者" not in jba_member_category:
+                                if jba_registration_status and jba_registration_status.strip() == "登録完了":
+                                    is_valid_registration = True
+                            # 構成員区分が取得できない場合も確認（競技者でない可能性がある）
+                            elif not jba_member_category:
+                                if jba_registration_status and jba_registration_status.strip() == "登録完了":
+                                    is_valid_registration = True
+                        
+                        # 登録状態が有効な場合のみ〇
+                        if is_valid_registration:
                             status_symbol = "〇"
                         else:
                             # 登録状態が「登録完了」以外、または取得できない場合は△

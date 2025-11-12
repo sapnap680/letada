@@ -493,6 +493,7 @@ class JBAVerificationSystem:
                             height = ""
                             weight = ""
                             registration_status = None
+                            member_category = None  # 構成員区分
                             
                             for i, cell in enumerate(cells):
                                 cell_text = cell.get_text(strip=True)
@@ -514,6 +515,10 @@ class JBAVerificationSystem:
                                 # 登録状態を探す（「無所属」「登録完了」など）
                                 if cell_text and ('無所属' in cell_text or '登録' in cell_text or '実績' in cell_text):
                                     registration_status = cell_text
+                                
+                                # 構成員区分を探す（「競技者」「スタッフ」など）
+                                if cell_text and ('競技者' in cell_text or 'スタッフ' in cell_text or '構成員' in cell_text):
+                                    member_category = cell_text
                             
                             members.append({
                                 "name": player_name,
@@ -522,7 +527,8 @@ class JBAVerificationSystem:
                                 "height": height,
                                 "weight": weight,
                                 "detail_url": detail_url,
-                                "registration_status": registration_status
+                                "registration_status": registration_status,
+                                "member_category": member_category  # 構成員区分を追加
                             })
             
             # 最終結果をログに記録（メンバーが0人の場合のみ警告）
@@ -832,7 +838,7 @@ class JBAVerificationSystem:
                             continue
                     
                     # 候補が1つ以上ある場合、最も類似度が高いものを選ぶ
-                    # ただし、同じ人のデータが複数ある場合は「登録完了」を優先
+                    # ただし、同じ人のデータが複数ある場合は構成員区分を考慮
                     if candidates:
                         # 同じ人（名前が同じ）のデータをグループ化
                         from collections import defaultdict
@@ -841,23 +847,39 @@ class JBAVerificationSystem:
                             member_name = candidate["member"].get("name", "")
                             name_groups[member_name].append(candidate)
                         
-                        # 各グループ内で「登録完了」がある場合はそれを優先
+                        # 各グループ内で構成員区分を考慮して候補を選ぶ
                         best_candidates = []
                         for member_name, group_candidates in name_groups.items():
-                            # グループ内で「登録完了」がある候補を探す
-                            registered_candidates = [
-                                c for c in group_candidates
-                                if c["team_registration_status"] and "登録完了" in str(c["team_registration_status"])
-                            ]
-                            
-                            if registered_candidates:
-                                # 「登録完了」がある場合は、その中で最も類似度が高いものを選ぶ
-                                registered_candidates.sort(key=lambda x: x["similarity"], reverse=True)
-                                best_candidates.append(registered_candidates[0])
+                            # player_noがある場合（選手）は「競技者」の登録状態を確認
+                            # player_noがない場合（スタッフ）は「競技者」以外の登録状態を確認
+                            if player_no:
+                                # 選手の場合：構成員区分が「競技者」の候補を優先
+                                athlete_candidates = [
+                                    c for c in group_candidates
+                                    if c["member"].get("member_category") and "競技者" in str(c["member"].get("member_category"))
+                                ]
+                                if athlete_candidates:
+                                    # 「競技者」の候補がある場合は、その中で最も類似度が高いものを選ぶ
+                                    athlete_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                    best_candidates.append(athlete_candidates[0])
+                                else:
+                                    # 「競技者」の候補がない場合は、グループ内で最も類似度が高いものを選ぶ
+                                    group_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                    best_candidates.append(group_candidates[0])
                             else:
-                                # 「登録完了」がない場合は、グループ内で最も類似度が高いものを選ぶ
-                                group_candidates.sort(key=lambda x: x["similarity"], reverse=True)
-                                best_candidates.append(group_candidates[0])
+                                # スタッフの場合：構成員区分が「競技者」以外の候補を優先（競技者は絶対見ない）
+                                staff_candidates = [
+                                    c for c in group_candidates
+                                    if not c["member"].get("member_category") or "競技者" not in str(c["member"].get("member_category"))
+                                ]
+                                if staff_candidates:
+                                    # 「競技者」以外の候補がある場合は、その中で最も類似度が高いものを選ぶ
+                                    staff_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                    best_candidates.append(staff_candidates[0])
+                                else:
+                                    # 「競技者」以外の候補がない場合は、グループ内で最も類似度が高いものを選ぶ
+                                    group_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                    best_candidates.append(group_candidates[0])
                         
                         # 最終的に最も類似度が高いものを選ぶ
                         # ただし、同じ類似度の場合は「登録完了」を優先
