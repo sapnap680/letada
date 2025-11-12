@@ -792,6 +792,9 @@ class JBAVerificationSystem:
                     # 🚀 パフォーマンス改善: ログ出力を削減
                     logger.debug(f"🔍 メンバー数: {len(team_data['members'])}人")
                     
+                    # 閾値を超える候補を全て収集（最も類似度が高いものを選ぶため）
+                    candidates = []
+                    
                     for i, member in enumerate(team_data["members"]):
                         try:
                             # 氏名がアルファベットの場合のみ、カナ名で選手名を探す
@@ -800,7 +803,7 @@ class JBAVerificationSystem:
                                 # カナ名で選手名を探す（JBAデータの氏名カナと照合）
                                 search_name = kana_name
                         
-                        # 名前の類似度チェック
+                            # 名前の類似度チェック
                             name_similarity = self.calculate_similarity(search_name, member.get("name", ""))
                             
                             # カナ名も照合（JBAデータの氏名カナと照合）
@@ -808,43 +811,104 @@ class JBAVerificationSystem:
                             if kana_name and member.get("kana_name"):
                                 kana_similarity = self.calculate_similarity(kana_name, member.get("kana_name", ""))
                             
-                            # 名前またはカナ名の類似度が0.6以上ならJBA登録あり（〇）として扱う
+                            # 名前またはカナ名の類似度の最大値を計算
                             max_similarity = max(name_similarity, kana_similarity)
-                            if max_similarity >= 0.6:
+                            
+                            # 閾値を超える場合は候補として追加
+                            if max_similarity >= threshold:
                                 # 🚀 パフォーマンス改善: デバッグ情報（マッチした場合のみ）
-                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 名前類似度: {name_similarity:.3f}, カナ類似度: {kana_similarity:.3f}")
+                                logger.debug(f"  - JBA選手: {member.get('name', 'N/A')}, 名前類似度: {name_similarity:.3f}, カナ類似度: {kana_similarity:.3f}, 最大類似度: {max_similarity:.3f}")
                                 
-                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
-                                # チームページから取得した登録状態を保持（最優先）
-                                team_registration_status = member.get("registration_status")
-                                
-                                if get_details and member.get("detail_url"):
-                                    try:
-                                        if player_no:
-                                            # 背番号がある場合は身長・体重・学年・カナ名を取得（登録状態はチームページから取得）
-                                            fields = ['height', 'weight', 'grade', 'kana_name']
-                                        else:
-                                            # 背番号がない場合はカナ名も取得（照合に使用、登録状態はチームページから取得）
-                                            fields = ['kana_name']
-                                        player_details = self.get_player_details(member["detail_url"], fields=fields)
-                                        member.update(player_details)
-                                        
-                                        # チームページから取得した登録状態を常に優先
-                                        if team_registration_status:
-                                            member["registration_status"] = team_registration_status
-                                    except Exception as detail_error:
-                                        logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
-                                
-                                # JBA登録あり（〇）として返す
-                                return {
-                                    "status": "match",
-                                    "jba_data": member,
-                                    "similarity": max_similarity
-                                }
+                                candidates.append({
+                                    "member": member,
+                                    "similarity": max_similarity,
+                                    "name_similarity": name_similarity,
+                                    "kana_similarity": kana_similarity,
+                                    "team_registration_status": member.get("registration_status")
+                                })
                         
                         except Exception as member_error:
                             logger.error(f"❌ メンバー処理エラー: {member_error}")
                             continue
+                    
+                    # 候補が1つ以上ある場合、最も類似度が高いものを選ぶ
+                    # ただし、同じ人のデータが複数ある場合は「登録完了」を優先
+                    if candidates:
+                        # 同じ人（名前が同じ）のデータをグループ化
+                        from collections import defaultdict
+                        name_groups = defaultdict(list)
+                        for candidate in candidates:
+                            member_name = candidate["member"].get("name", "")
+                            name_groups[member_name].append(candidate)
+                        
+                        # 各グループ内で「登録完了」がある場合はそれを優先
+                        best_candidates = []
+                        for member_name, group_candidates in name_groups.items():
+                            # グループ内で「登録完了」がある候補を探す
+                            registered_candidates = [
+                                c for c in group_candidates
+                                if c["team_registration_status"] and "登録完了" in str(c["team_registration_status"])
+                            ]
+                            
+                            if registered_candidates:
+                                # 「登録完了」がある場合は、その中で最も類似度が高いものを選ぶ
+                                registered_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                best_candidates.append(registered_candidates[0])
+                            else:
+                                # 「登録完了」がない場合は、グループ内で最も類似度が高いものを選ぶ
+                                group_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                best_candidates.append(group_candidates[0])
+                        
+                        # 最終的に最も類似度が高いものを選ぶ
+                        # ただし、同じ類似度の場合は「登録完了」を優先
+                        best_candidates.sort(
+                            key=lambda x: (
+                                x["similarity"],
+                                1 if (x["team_registration_status"] and "登録完了" in str(x["team_registration_status"])) else 0
+                            ),
+                            reverse=True
+                        )
+                        best_candidate = best_candidates[0]
+                        
+                        member = best_candidate["member"]
+                        max_similarity = best_candidate["similarity"]
+                        team_registration_status = best_candidate["team_registration_status"]
+                        
+                        # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
+                        if get_details and member.get("detail_url"):
+                            try:
+                                if player_no:
+                                    # 背番号がある場合は身長・体重・学年・カナ名を取得（登録状態はチームページから取得）
+                                    fields = ['height', 'weight', 'grade', 'kana_name']
+                                else:
+                                    # 背番号がない場合はカナ名も取得（照合に使用、登録状態はチームページから取得）
+                                    fields = ['kana_name']
+                                player_details = self.get_player_details(member["detail_url"], fields=fields)
+                                member.update(player_details)
+                                
+                                # チームページから取得した登録状態を常に優先
+                                if team_registration_status:
+                                    member["registration_status"] = team_registration_status
+                            except Exception as detail_error:
+                                logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
+                        
+                        # 複数の候補があった場合はログに記録
+                        if len(candidates) > 1:
+                            registration_info = ""
+                            if team_registration_status:
+                                registration_info = f", 登録状態: {team_registration_status}"
+                            logger.info(f"  ⚠️ 閾値を超える候補が{len(candidates)}件ありました。最も類似度が高いものを採用: {member.get('name', 'N/A')} (類似度: {max_similarity:.3f}{registration_info})")
+                            
+                            # 同じ人のデータが複数あった場合はログに記録
+                            if len(name_groups) < len(candidates):
+                                logger.info(f"  ℹ️ 同じ人のデータが複数ありました。登録状態を優先して選択しました。")
+                        
+                        # JBA登録あり（〇）として返す
+                        return {
+                            "status": "match",
+                            "jba_data": member,
+                            "similarity": max_similarity
+                        }
                 
                 except Exception as team_error:
                     logger.error(f"❌ チーム処理エラー ({team.get('name', 'Unknown')}): {team_error}")

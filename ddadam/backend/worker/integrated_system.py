@@ -639,14 +639,30 @@ class IntegratedTournamentSystem:
                 for col in no_columns:
                     if col in row.index and pd.notna(row[col]):
                         value = str(row[col]).strip()
-                        # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
-                        if value.isdigit() or value.replace('.', '').isdigit():
+                        # 数字のみ有効（純粋な整数または小数点を含む数値のみ）
+                        # 数字以外の文字（例: "10A", "10-1", "トレーナー"）が含まれている場合は無視
+                        if value.isdigit():
+                            # 整数のみ
                             player_no = value
                             break
+                        elif '.' in value and value.replace('.', '').isdigit() and value.count('.') == 1:
+                            # 小数点を含む数値（例: "10.5"）のみ
+                            player_no = value
+                            break
+                        # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
+                
+                # 編集ページから取得した選手名かチェック（より厳密な照合が必要）
+                is_edited_from_html = False
+                if univ and player_name:
+                    is_edited_from_html = self.edited_player_names.get((univ, player_name), False)
+                
+                # 編集ページから取得した選手名の場合は閾値を高くする（0.9以上）
+                # それ以外の場合は0.6以上
+                threshold = 0.9 if is_edited_from_html else 0.6
                 
                 # JBA照合
                 verification_result = self.jba_system.verify_player_info(
-                    player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no, kana_name=kana_name
+                    player_name, None, univ, get_details=True, threshold=threshold, player_no=player_no, kana_name=kana_name
                 )
                 
                 result = {
@@ -1062,15 +1078,17 @@ class IntegratedTournamentSystem:
             for col in no_columns:
                 if col in row.index and pd.notna(row[col]):
                     value = str(row[col]).strip()
-                    # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
+                    # 数字のみ有効（純粋な整数または小数点を含む数値のみ）
+                    # 数字以外の文字（例: "10A", "10-1", "トレーナー"）が含まれている場合は無視
                     if value.isdigit():
+                        # 整数のみ
                         player_no = value
                         break
-                    # 数字を含む文字列（例: "10.5"）も有効
-                    elif value.replace('.', '').isdigit():
+                    elif '.' in value and value.replace('.', '').isdigit() and value.count('.') == 1:
+                        # 小数点を含む数値（例: "10.5"）のみ
                         player_no = value
                         break
-                    # 数値以外（「トレーナー」「学生コーチ」など）はplayer_no = Noneのまま
+                    # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
             
             # カナ名を取得
             kana_name = None
@@ -1086,9 +1104,18 @@ class IntegratedTournamentSystem:
             else:
                 logger.debug(f"  - 背番号: なし（コーチ扱い）")
             
+            # 編集ページから取得した選手名かチェック（より厳密な照合が必要）
+            is_edited_from_html = False
+            if univ and player_name:
+                is_edited_from_html = self.edited_player_names.get((univ, player_name), False)
+            
+            # 編集ページから取得した選手名の場合は閾値を高くする（0.9以上）
+            # それ以外の場合は0.6以上
+            threshold = 0.9 if is_edited_from_html else 0.6
+            
             # 詳細情報を取得（学年は背番号の有無に関わらず必要）
             verification_result = self.jba_system.verify_player_info(
-                player_name, None, univ, get_details=True, threshold=1.0, player_no=player_no, kana_name=kana_name
+                player_name, None, univ, get_details=True, threshold=threshold, player_no=player_no, kana_name=kana_name
             )
             
             # 結果をログに記録
