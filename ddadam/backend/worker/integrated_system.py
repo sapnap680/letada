@@ -1702,18 +1702,22 @@ class IntegratedTournamentSystem:
                     else:
                         grade = grade_truncated
                     
-                    # ステータス記号の設定（登録状態チェックを優先）
+                    # ステータス記号の設定（登録状態チェックを最優先）
                     # 登録状態が「登録完了」以外の場合は、JBAステータスを△にする（最優先）
                     # まずJBA照合結果から登録状態を取得してチェック
                     jba_registration_status = None
                     verification_result = r.get("verification_result", {})
                     if verification_result and verification_result.get("status") == "match":
                         jba_data = verification_result.get("jba_data", {})
-                        if jba_data and "registration_status" in jba_data and jba_data["registration_status"]:
-                            jba_registration_status = str(jba_data["registration_status"]).strip()
+                        if jba_data:
+                            # 登録状態が存在するかチェック（空文字列やNoneも含む）
+                            if "registration_status" in jba_data:
+                                registration_status_raw = jba_data["registration_status"]
+                                # 空文字列やNoneでない場合のみ取得
+                                if registration_status_raw is not None and str(registration_status_raw).strip():
+                                    jba_registration_status = str(registration_status_raw).strip()
                     
-                    # 登録状態が「登録完了」以外の場合は△にする（最優先）
-                    # 先頭・末尾の空白を除去して比較
+                    # 登録状態が取得できて、かつ「登録完了」以外の場合は△にする（最優先）
                     if jba_registration_status and jba_registration_status.strip() != "登録完了":
                         status_symbol = "△"
                     else:
