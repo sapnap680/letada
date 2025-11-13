@@ -824,7 +824,7 @@ class JBAVerificationSystem:
                             if has_kana_name:
                                 # カナ名がある場合：名前とカナ名の両方が閾値を超えた場合のみマッチ
                                 if name_similarity >= threshold and kana_similarity >= threshold:
-                                    max_similarity = max(name_similarity, kana_similarity)
+                            max_similarity = max(name_similarity, kana_similarity)
                                 else:
                                     # どちらかが閾値を超えていない場合はスキップ
                                     continue
@@ -910,24 +910,24 @@ class JBAVerificationSystem:
                         member = best_candidate["member"]
                         max_similarity = best_candidate["similarity"]
                         team_registration_status = best_candidate["team_registration_status"]
-                        
-                        # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
-                        if get_details and member.get("detail_url"):
-                            try:
-                                if player_no:
+                                
+                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
+                                if get_details and member.get("detail_url"):
+                                    try:
+                                        if player_no:
                                     # 背番号がある場合は身長・体重・学年・カナ名を取得（登録状態はチームページから取得）
                                     fields = ['height', 'weight', 'grade', 'kana_name']
-                                else:
+                                        else:
                                     # 背番号がない場合はカナ名も取得（照合に使用、登録状態はチームページから取得）
-                                    fields = ['kana_name']
-                                player_details = self.get_player_details(member["detail_url"], fields=fields)
-                                member.update(player_details)
+                                            fields = ['kana_name']
+                                        player_details = self.get_player_details(member["detail_url"], fields=fields)
+                                        member.update(player_details)
                                 
                                 # チームページから取得した登録状態を常に優先
                                 if team_registration_status:
                                     member["registration_status"] = team_registration_status
-                            except Exception as detail_error:
-                                logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
+                                    except Exception as detail_error:
+                                        logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
                                 
                         # 複数の候補があった場合はログに記録
                         if len(candidates) > 1:
