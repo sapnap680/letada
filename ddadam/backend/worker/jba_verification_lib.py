@@ -809,7 +809,7 @@ class JBAVerificationSystem:
                                 # カナ名で選手名を探す（JBAデータの氏名カナと照合）
                                 search_name = kana_name
                         
-                            # 名前の類似度チェック
+                        # 名前の類似度チェック
                             name_similarity = self.calculate_similarity(search_name, member.get("name", ""))
                             
                             # カナ名も照合（JBAデータの氏名カナと照合）
@@ -928,7 +928,7 @@ class JBAVerificationSystem:
                                     member["registration_status"] = team_registration_status
                             except Exception as detail_error:
                                 logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
-                        
+                                
                         # 複数の候補があった場合はログに記録
                         if len(candidates) > 1:
                             registration_info = ""
@@ -940,12 +940,12 @@ class JBAVerificationSystem:
                             if len(name_groups) < len(candidates):
                                 logger.info(f"  ℹ️ 同じ人のデータが複数ありました。登録状態を優先して選択しました。")
                         
-                        # JBA登録あり（〇）として返す
-                        return {
-                            "status": "match",
-                            "jba_data": member,
-                            "similarity": max_similarity
-                        }
+                                # JBA登録あり（〇）として返す
+                                return {
+                                    "status": "match",
+                                    "jba_data": member,
+                                    "similarity": max_similarity
+                                }
                 
                 except Exception as team_error:
                     logger.error(f"❌ チーム処理エラー ({team.get('name', 'Unknown')}): {team_error}")
