@@ -673,14 +673,17 @@ class IntegratedTournamentSystem:
                             break
                         # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
                 
-                # 編集ページから取得した選手名かチェック（より厳密な照合が必要）
+                # 編集ページから取得した選手名かチェック
+                # 編集ページから取得した選手名は「CSVの正しい選手名」であって、
+                # JBAの選手名と一致するとは限らないため、通常の閾値（0.6）を使用
                 is_edited_from_html = False
                 if univ and player_name:
                     is_edited_from_html = self.edited_player_names.get((univ, player_name), False)
                 
-                # 編集ページから取得した選手名の場合は閾値を高くする（0.9以上）
-                # それ以外の場合は0.6以上
-                threshold = 0.9 if is_edited_from_html else 0.6
+                # 通常の閾値（0.6）を使用（編集ページから取得した選手名でも同様）
+                # 編集ページから取得した選手名は「正しい」CSVの選手名なので、
+                # JBA照合時は通常の閾値で柔軟に照合する（「栁本 晴暖」と「柳本 晴暖」のような類似文字の違いでも照合できる）
+                threshold = 0.6
                 
                 # JBA照合
                 verification_result = self.jba_system.verify_player_info(
@@ -1076,41 +1079,41 @@ class IntegratedTournamentSystem:
         import logging
         logger = logging.getLogger(__name__)
         
-        # キャッシュキーを生成
-        cache_key = f"player_{player_name}_{univ}"
+        # 先に背番号を取得（キャッシュキーに含めるため）
+        player_no = None
+        no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+        for col in no_columns:
+            if col in row.index and pd.notna(row[col]):
+                value = str(row[col]).strip()
+                # 数字のみ有効（純粋な整数または小数点を含む数値のみ）
+                # 数字以外の文字（例: "10A", "10-1", "トレーナー"）が含まれている場合は無視
+                if value.isdigit():
+                    # 整数のみ
+                    player_no = value
+                    break
+                elif '.' in value and value.replace('.', '').isdigit() and value.count('.') == 1:
+                    # 小数点を含む数値（例: "10.5"）のみ
+                    player_no = value
+                    break
+                # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
+        
+        # キャッシュキーを生成（背番号を含める）
+        cache_key = f"player_{player_name}_{univ}_{player_no or 'no_number'}"
         cached_result = self._get_cached_data(cache_key)
         
         if cached_result:
             # キャッシュから取得
             cached_result['index'] = index
             cached_result['original_data'] = row.to_dict()
+            cached_result['player_no'] = player_no  # 背番号を確実に設定
             return cached_result
         
         # 実際にJBA照合を実行
         # 🚀 パフォーマンス改善: ログ出力を削減
-        logger.debug(f"🔍 JBA照合開始: {player_name} ({univ})")
+        logger.debug(f"🔍 JBA照合開始: {player_name} ({univ}, 背番号: {player_no or 'なし'})")
         
         start_time = time.time()
         try:
-            # CSVから背番号（No）を取得（数字のみ有効）
-            # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
-            player_no = None
-            no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
-            
-            for col in no_columns:
-                if col in row.index and pd.notna(row[col]):
-                    value = str(row[col]).strip()
-                    # 数字のみ有効（純粋な整数または小数点を含む数値のみ）
-                    # 数字以外の文字（例: "10A", "10-1", "トレーナー"）が含まれている場合は無視
-                    if value.isdigit():
-                        # 整数のみ
-                        player_no = value
-                        break
-                    elif '.' in value and value.replace('.', '').isdigit() and value.count('.') == 1:
-                        # 小数点を含む数値（例: "10.5"）のみ
-                        player_no = value
-                        break
-                    # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
             
             # カナ名を取得
             kana_name = None
@@ -1126,14 +1129,17 @@ class IntegratedTournamentSystem:
             else:
                 logger.debug(f"  - 背番号: なし（コーチ扱い）")
             
-            # 編集ページから取得した選手名かチェック（より厳密な照合が必要）
+            # 編集ページから取得した選手名かチェック
+            # 編集ページから取得した選手名は「CSVの正しい選手名」であって、
+            # JBAの選手名と一致するとは限らないため、通常の閾値（0.6）を使用
             is_edited_from_html = False
             if univ and player_name:
                 is_edited_from_html = self.edited_player_names.get((univ, player_name), False)
             
-            # 編集ページから取得した選手名の場合は閾値を高くする（0.9以上）
-            # それ以外の場合は0.6以上
-            threshold = 0.9 if is_edited_from_html else 0.6
+            # 通常の閾値（0.6）を使用（編集ページから取得した選手名でも同様）
+            # 編集ページから取得した選手名は「正しい」CSVの選手名なので、
+            # JBA照合時は通常の閾値で柔軟に照合する（「栁本 晴暖」と「柳本 晴暖」のような類似文字の違いでも照合できる）
+            threshold = 0.6
             
             # 詳細情報を取得（学年は背番号の有無に関わらず必要）
             verification_result = self.jba_system.verify_player_info(
@@ -1169,20 +1175,7 @@ class IntegratedTournamentSystem:
             / self.performance_stats['requests_count']
         )
         
-        # player_no を取得（エラー時は None）
-        # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
-        player_no = None
-        try:
-            no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
-            for col in no_columns:
-                if col in row.index and pd.notna(row[col]):
-                    value = str(row[col]).strip()
-                    # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
-                    if value.isdigit() or value.replace('.', '').isdigit():
-                        player_no = value
-                        break
-        except:
-            pass
+        # player_no は既に取得済み（キャッシュキー生成時に取得）
         
         result = {
             'index': index,
