@@ -1356,13 +1356,12 @@ class IntegratedTournamentSystem:
                     deduplicated_results.append(result)
                     continue
                 
-                # 選手（背番号あり）とスタッフ（背番号なし）を区別するため、
-                # キーに背番号の有無を含める
-                has_player_no = player_no is not None
-                key = (univ, player_name, has_player_no)
+                # 重複チェック: 同じ大学名、同じ選手名、同じ背番号の組み合わせで重複をチェック
+                # 背番号の値も含めることで、同じ選手名でも背番号が異なる場合は別々のレコードとして扱う
+                key = (univ, player_name, player_no)
                 
                 if key in seen_players:
-                    # 重複が見つかった場合（同じ大学名、同じ選手名、同じ種類）
+                    # 重複が見つかった場合（同じ大学名、同じ選手名、同じ背番号）
                     # 最初に見つかった方を保持（indexが小さい方）
                     existing_result = seen_players[key]
                     if result.get('index', 0) < existing_result.get('index', 0):
@@ -1374,7 +1373,7 @@ class IntegratedTournamentSystem:
                     else:
                         continue
                 else:
-                    # 重複がない場合は追加（選手とスタッフは別々のものとして扱われる）
+                    # 重複がない場合は追加（同じ選手名でも背番号が異なる場合は別々のレコードとして扱われる）
                     deduplicated_results.append(result)
                     seen_players[key] = result
             
