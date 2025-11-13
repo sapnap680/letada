@@ -809,7 +809,7 @@ class JBAVerificationSystem:
                                 # カナ名で選手名を探す（JBAデータの氏名カナと照合）
                                 search_name = kana_name
                         
-                        # 名前の類似度チェック
+                            # 名前の類似度チェック
                             name_similarity = self.calculate_similarity(search_name, member.get("name", ""))
                             
                             # カナ名も照合（JBAデータの氏名カナと照合）
@@ -824,7 +824,7 @@ class JBAVerificationSystem:
                             if has_kana_name:
                                 # カナ名がある場合：名前とカナ名の両方が閾値を超えた場合のみマッチ
                                 if name_similarity >= threshold and kana_similarity >= threshold:
-                            max_similarity = max(name_similarity, kana_similarity)
+                                    max_similarity = max(name_similarity, kana_similarity)
                                 else:
                                     # どちらかが閾値を超えていない場合はスキップ
                                     continue
@@ -910,25 +910,25 @@ class JBAVerificationSystem:
                         member = best_candidate["member"]
                         max_similarity = best_candidate["similarity"]
                         team_registration_status = best_candidate["team_registration_status"]
-                                
-                                # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
-                                if get_details and member.get("detail_url"):
-                                    try:
-                                        if player_no:
+                        
+                        # 🚀 パフォーマンス改善3: 詳細情報を取得する場合
+                        if get_details and member.get("detail_url"):
+                            try:
+                                if player_no:
                                     # 背番号がある場合は身長・体重・学年・カナ名を取得（登録状態はチームページから取得）
                                     fields = ['height', 'weight', 'grade', 'kana_name']
-                                        else:
+                                else:
                                     # 背番号がない場合はカナ名も取得（照合に使用、登録状態はチームページから取得）
-                                            fields = ['kana_name']
-                                        player_details = self.get_player_details(member["detail_url"], fields=fields)
-                                        member.update(player_details)
+                                    fields = ['kana_name']
+                                player_details = self.get_player_details(member["detail_url"], fields=fields)
+                                member.update(player_details)
                                 
                                 # チームページから取得した登録状態を常に優先
                                 if team_registration_status:
                                     member["registration_status"] = team_registration_status
-                                    except Exception as detail_error:
-                                        logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
-                                
+                            except Exception as detail_error:
+                                logger.error(f"❌ 選手詳細取得エラー: {detail_error}")
+                        
                         # 複数の候補があった場合はログに記録
                         if len(candidates) > 1:
                             registration_info = ""
@@ -940,12 +940,12 @@ class JBAVerificationSystem:
                             if len(name_groups) < len(candidates):
                                 logger.info(f"  ℹ️ 同じ人のデータが複数ありました。登録状態を優先して選択しました。")
                         
-                                # JBA登録あり（〇）として返す
-                                return {
-                                    "status": "match",
-                                    "jba_data": member,
-                                    "similarity": max_similarity
-                                }
+                        # JBA登録あり（〇）として返す
+                        return {
+                            "status": "match",
+                            "jba_data": member,
+                            "similarity": max_similarity
+                        }
                 
                 except Exception as team_error:
                     logger.error(f"❌ チーム処理エラー ({team.get('name', 'Unknown')}): {team_error}")
