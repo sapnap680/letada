@@ -778,7 +778,22 @@ class JBAVerificationSystem:
                 logger.warning(f"⚠️ {university}の男子チームが見つかりませんでした")
                 return {"status": "not_found", "message": f"{university}の男子チームが見つかりませんでした"}
 
-            # 各チームのメンバー情報を取得して照合
+            # 複数のチームが見つかった場合、元の大学名との類似度でソート（最も近いチームを優先）
+            if len(teams) > 1:
+                logger.info(f"🔍 {len(teams)}チームが見つかりました。大学名との類似度で優先順位を決定します...")
+                team_similarities = []
+                for team in teams:
+                    # チーム名と元の大学名の類似度を計算
+                    similarity = self.calculate_similarity(university, team.get('name', ''))
+                    team_similarities.append((team, similarity))
+                    logger.debug(f"  - {team.get('name', '')}: 類似度 {similarity:.3f}")
+                
+                # 類似度が高い順にソート
+                team_similarities.sort(key=lambda x: x[1], reverse=True)
+                teams = [team for team, _ in team_similarities]
+                logger.info(f"✅ 優先順位: {', '.join([team.get('name', '') for team in teams])}")
+
+            # 各チームのメンバー情報を取得して照合（優先順位順）
             for team in teams:
                 try:
                     # 🚀 パフォーマンス改善: メンバー情報をキャッシュから取得
@@ -888,8 +903,15 @@ class JBAVerificationSystem:
                                     if not c["member"].get("member_category") or "競技者" not in str(c["member"].get("member_category"))
                                 ]
                                 if staff_candidates:
-                                    # 「競技者」以外の候補がある場合は、その中で最も類似度が高いものを選ぶ
-                                    staff_candidates.sort(key=lambda x: x["similarity"], reverse=True)
+                                    # 「競技者」以外の候補がある場合は、類似度と登録完了を考慮して選ぶ
+                                    # 同じ類似度の場合は「登録完了」を優先
+                                    staff_candidates.sort(
+                                        key=lambda x: (
+                                            x["similarity"],
+                                            1 if (x["team_registration_status"] and "登録完了" in str(x["team_registration_status"])) else 0
+                                        ),
+                                        reverse=True
+                                    )
                                     best_candidates.append(staff_candidates[0])
                                 else:
                                     # 「競技者」以外の候補がない場合は、グループ内で最も類似度が高いものを選ぶ
@@ -897,7 +919,8 @@ class JBAVerificationSystem:
                                     best_candidates.append(group_candidates[0])
                         
                         # 最終的に最も類似度が高いものを選ぶ
-                        # ただし、同じ類似度の場合は「登録完了」を優先
+                        # 選手・コーチともに、同じ類似度の場合は「登録完了」を優先
+                        # コーチの場合も、複数の候補がある場合は登録完了を優先して選択
                         best_candidates.sort(
                             key=lambda x: (
                                 x["similarity"],
