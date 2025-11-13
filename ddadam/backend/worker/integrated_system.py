@@ -1076,41 +1076,41 @@ class IntegratedTournamentSystem:
         import logging
         logger = logging.getLogger(__name__)
         
-        # 先に背番号を取得（キャッシュキーに含めるため）
-        player_no = None
-        no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
-        for col in no_columns:
-            if col in row.index and pd.notna(row[col]):
-                value = str(row[col]).strip()
-                # 数字のみ有効（純粋な整数または小数点を含む数値のみ）
-                # 数字以外の文字（例: "10A", "10-1", "トレーナー"）が含まれている場合は無視
-                if value.isdigit():
-                    # 整数のみ
-                    player_no = value
-                    break
-                elif '.' in value and value.replace('.', '').isdigit() and value.count('.') == 1:
-                    # 小数点を含む数値（例: "10.5"）のみ
-                    player_no = value
-                    break
-                # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
-        
-        # キャッシュキーを生成（背番号を含める）
-        cache_key = f"player_{player_name}_{univ}_{player_no or 'no_number'}"
+        # キャッシュキーを生成
+        cache_key = f"player_{player_name}_{univ}"
         cached_result = self._get_cached_data(cache_key)
         
         if cached_result:
             # キャッシュから取得
             cached_result['index'] = index
             cached_result['original_data'] = row.to_dict()
-            cached_result['player_no'] = player_no  # 背番号を確実に設定
             return cached_result
         
         # 実際にJBA照合を実行
         # 🚀 パフォーマンス改善: ログ出力を削減
-        logger.debug(f"🔍 JBA照合開始: {player_name} ({univ}, 背番号: {player_no or 'なし'})")
+        logger.debug(f"🔍 JBA照合開始: {player_name} ({univ})")
         
         start_time = time.time()
         try:
+            # CSVから背番号（No）を取得（数字のみ有効）
+            # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
+            player_no = None
+            no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+            
+            for col in no_columns:
+                if col in row.index and pd.notna(row[col]):
+                    value = str(row[col]).strip()
+                    # 数字のみ有効（純粋な整数または小数点を含む数値のみ）
+                    # 数字以外の文字（例: "10A", "10-1", "トレーナー"）が含まれている場合は無視
+                    if value.isdigit():
+                        # 整数のみ
+                        player_no = value
+                        break
+                    elif '.' in value and value.replace('.', '').isdigit() and value.count('.') == 1:
+                        # 小数点を含む数値（例: "10.5"）のみ
+                        player_no = value
+                        break
+                    # それ以外（数字以外の文字を含む）はplayer_no = Noneのまま
             
             # カナ名を取得
             kana_name = None
@@ -1169,7 +1169,20 @@ class IntegratedTournamentSystem:
             / self.performance_stats['requests_count']
         )
         
-        # player_no は既に取得済み（キャッシュキー生成時に取得）
+        # player_no を取得（エラー時は None）
+        # 数値以外の値（「トレーナー」「学生コーチ」など）は背番号がない人として扱う
+        player_no = None
+        try:
+            no_columns = ['No', 'NO', 'no', '背番号', 'No.', '番号', 'ナンバー', '#']
+            for col in no_columns:
+                if col in row.index and pd.notna(row[col]):
+                    value = str(row[col]).strip()
+                    # 数字のみ有効（数値以外の値は無視してplayer_noはNoneのまま）
+                    if value.isdigit() or value.replace('.', '').isdigit():
+                        player_no = value
+                        break
+        except:
+            pass
         
         result = {
             'index': index,
@@ -1328,11 +1341,50 @@ class IntegratedTournamentSystem:
             # CSVの順番を保持するため、indexでソート
             univ_results.sort(key=lambda x: x.get('index', 0))
             
-            # 重複除去は行わず、すべてのレコードをそのまま保持
+            # 重複チェック: 同じ大学名、同じ選手名、同じ種類（選手/スタッフ）の組み合わせで重複をチェック
+            # 選手（背番号あり）とスタッフ（背番号なし）は別々のものとして扱う
+            seen_players = {}
+            deduplicated_results = []
+            
+            for result in univ_results:
+                original_data = result.get('original_data', {})
+                player_name = str(original_data.get('選手名', original_data.get('氏名', ''))).strip()
+                player_no = result.get('player_no')  # 背番号（数字のみ有効）
+                
+                # 選手名が空の場合はスキップ
+                if not player_name:
+                    deduplicated_results.append(result)
+                    continue
+                
+                # 選手（背番号あり）とスタッフ（背番号なし）を区別するため、
+                # キーに背番号の有無を含める
+                has_player_no = player_no is not None
+                key = (univ, player_name, has_player_no)
+                
+                if key in seen_players:
+                    # 重複が見つかった場合（同じ大学名、同じ選手名、同じ種類）
+                    # 最初に見つかった方を保持（indexが小さい方）
+                    existing_result = seen_players[key]
+                    if result.get('index', 0) < existing_result.get('index', 0):
+                        # 現在のレコードの方がindexが小さい場合は、既存のレコードを置き換え
+                        deduplicated_results.remove(existing_result)
+                        deduplicated_results.append(result)
+                        seen_players[key] = result
+                    # 既存のレコードの方がindexが小さい場合は、現在のレコードをスキップ
+                    else:
+                        continue
+                else:
+                    # 重複がない場合は追加（選手とスタッフは別々のものとして扱われる）
+                    deduplicated_results.append(result)
+                    seen_players[key] = result
+            
+            # 重複除去後の結果をindexでソート（順番を保持）
+            deduplicated_results.sort(key=lambda x: x.get('index', 0))
+            
             # 統計情報を計算
-            total_players = len(univ_results)
-            match_count = len([r for r in univ_results if r['status'] == 'match'])
-            not_found_count = len([r for r in univ_results if r['status'] == 'not_found'])
+            total_players = len(deduplicated_results)
+            match_count = len([r for r in deduplicated_results if r['status'] == 'match'])
+            not_found_count = len([r for r in deduplicated_results if r['status'] == 'not_found'])
             
             # レポートデータを作成
             report_data = {
@@ -1341,7 +1393,7 @@ class IntegratedTournamentSystem:
                 'match_count': match_count,
                 'not_found_count': not_found_count,
                 'match_rate': (match_count / total_players * 100) if total_players > 0 else 0,
-                'results': univ_results
+                'results': deduplicated_results
             }
             
             reports[univ] = report_data
