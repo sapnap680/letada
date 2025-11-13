@@ -1341,49 +1341,11 @@ class IntegratedTournamentSystem:
             # CSVの順番を保持するため、indexでソート
             univ_results.sort(key=lambda x: x.get('index', 0))
             
-            # 重複チェック: 同じ大学名、同じ選手名、同じ種類（選手/スタッフ）の組み合わせで重複をチェック
-            # 選手（背番号あり）とスタッフ（背番号なし）は別々のものとして扱う
-            seen_players = {}
-            deduplicated_results = []
-            
-            for result in univ_results:
-                original_data = result.get('original_data', {})
-                player_name = str(original_data.get('選手名', original_data.get('氏名', ''))).strip()
-                player_no = result.get('player_no')  # 背番号（数字のみ有効）
-                
-                # 選手名が空の場合はスキップ
-                if not player_name:
-                    deduplicated_results.append(result)
-                    continue
-                
-                # 重複チェック: 同じ大学名、同じ選手名、同じ背番号の組み合わせで重複をチェック
-                # 背番号の値も含めることで、同じ選手名でも背番号が異なる場合は別々のレコードとして扱う
-                key = (univ, player_name, player_no)
-                
-                if key in seen_players:
-                    # 重複が見つかった場合（同じ大学名、同じ選手名、同じ背番号）
-                    # 最初に見つかった方を保持（indexが小さい方）
-                    existing_result = seen_players[key]
-                    if result.get('index', 0) < existing_result.get('index', 0):
-                        # 現在のレコードの方がindexが小さい場合は、既存のレコードを置き換え
-                        deduplicated_results.remove(existing_result)
-                        deduplicated_results.append(result)
-                        seen_players[key] = result
-                    # 既存のレコードの方がindexが小さい場合は、現在のレコードをスキップ
-                    else:
-                        continue
-                else:
-                    # 重複がない場合は追加（同じ選手名でも背番号が異なる場合は別々のレコードとして扱われる）
-                    deduplicated_results.append(result)
-                    seen_players[key] = result
-            
-            # 重複除去後の結果をindexでソート（順番を保持）
-            deduplicated_results.sort(key=lambda x: x.get('index', 0))
-            
+            # 重複除去は行わず、すべてのレコードをそのまま保持
             # 統計情報を計算
-            total_players = len(deduplicated_results)
-            match_count = len([r for r in deduplicated_results if r['status'] == 'match'])
-            not_found_count = len([r for r in deduplicated_results if r['status'] == 'not_found'])
+            total_players = len(univ_results)
+            match_count = len([r for r in univ_results if r['status'] == 'match'])
+            not_found_count = len([r for r in univ_results if r['status'] == 'not_found'])
             
             # レポートデータを作成
             report_data = {
@@ -1392,7 +1354,7 @@ class IntegratedTournamentSystem:
                 'match_count': match_count,
                 'not_found_count': not_found_count,
                 'match_rate': (match_count / total_players * 100) if total_players > 0 else 0,
-                'results': deduplicated_results
+                'results': univ_results
             }
             
             reports[univ] = report_data
