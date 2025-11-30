@@ -1,39 +1,26 @@
 # -*- coding: utf-8 -*-
-# Streamlit removed
 import requests
 import logging
-import random
-
 from bs4 import BeautifulSoup
 import pandas as pd
 import os
 import re
 import time
 import threading
-import argparse
-from urllib.parse import urljoin
-import getpass
 from datetime import datetime
 import json
 import uuid
 import multiprocessing
 import unicodedata
-# オプション: バックグラウンドPDFワーカー（存在しない環境でも動作するようにガード）
-pdf_worker_main = None
-try:
-    from integrated_system_worker import pdf_worker_main
-except ImportError:
-    pass
 from io import StringIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.utils import simpleSplit
-import multiprocessing
 import platform
 
 # 既存のJBA検証システムのインポート
@@ -41,7 +28,7 @@ import sys
 sys.path.append('.')
 
 # JBA検証システムのインポート
-from worker.jba_verification_lib import JBAVerificationSystem, FastCSVCorrectionSystem, DataValidator
+from worker.jba_verification_lib import JBAVerificationSystem, DataValidator
 
 class IntegratedTournamentSystem:
     """大会IDからJBA照合まで一括処理する統合システム"""
@@ -233,14 +220,6 @@ class IntegratedTournamentSystem:
         with self._cache_lock:
             self._cache.clear()
     
-    def _measure_time(self, func, *args, **kwargs):
-        """関数の実行時間を測定"""
-        start_time = time.time()
-        result = func(*args, **kwargs)
-        end_time = time.time()
-        execution_time = end_time - start_time
-        return result, execution_time
-    
     def _save_temp_results(self, univ_name, results):
         """大学ごとの結果を一時保存"""
         temp_file = os.path.join(self.temp_dir, f"temp_results_{univ_name}.csv")
@@ -337,27 +316,6 @@ class IntegratedTournamentSystem:
         except Exception:
             return None
     
-    def _load_temp_results(self, univ_name):
-        """大学ごとの結果を一時保存から読み込み"""
-        temp_file = os.path.join(self.temp_dir, f"temp_results_{univ_name}.csv")
-        if os.path.exists(temp_file):
-            try:
-                df = pd.read_csv(temp_file, encoding='utf-8-sig')
-                return df.to_dict('records')
-            except Exception as e:
-                pass
-        return None
-    
-    def _clear_temp_results(self):
-        """一時保存ファイルをクリア"""
-        try:
-            for file in os.listdir(self.temp_dir):
-                if file.startswith("temp_results_") and file.endswith(".csv"):
-                    os.remove(os.path.join(self.temp_dir, file))
-            pass  # メッセージを表示しない
-        except Exception as e:
-            pass  # エラーメッセージも表示しない
-        
     def login_and_get_tournament_csvs(self, username, password, game_id):
         """ログインして大会の全CSVを取得"""
         
@@ -1393,318 +1351,297 @@ class IntegratedTournamentSystem:
         
         return reports
     
-    def _generate_university_report(self, university_name, report):
-        """単一大学のレポートを生成"""
-        html_content = f"""
-        <html>
-        <head>
-            <title>{university_name} 選手データ</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                .header {{ text-align: center; margin-bottom: 30px; }}
-                .stats {{ display: flex; justify-content: space-around; margin-bottom: 30px; }}
-                .stat-box {{ text-align: center; padding: 10px; border: 1px solid #ccc; }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-                th {{ background-color: #f2f2f2; }}
-                .page-break {{ page-break-before: always; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>{university_name} 選手データ</h1>
-                <p>生成日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}</p>
-            </div>
-            
-            <div class="stats">
-                <div class="stat-box">
-                    <h3>総選手数</h3>
-                    <p>{report['total_players']}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>JBA登録あり（〇）</h3>
-                    <p>{report['match_count']}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>JBA登録なし（×）</h3>
-                    <p>{report['not_found_count']}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>一致率</h3>
-                    <p>{report['match_rate']:.1f}%</p>
-                </div>
-            </div>
-            
-            <h2>選手詳細データ</h2>
-            <table>
-                <tr>
-                    <th>選手名</th>
-                    <th>身長</th>
-                    <th>体重</th>
-                    <th>ポジション</th>
-                    <th>出身校</th>
-                    <th>学年</th>
-                    <th>背番号</th>
-                    <th>照合結果</th>
-                </tr>
-        """
-        
-        for result in report['results']:
-            data = result['original_data']
-            message = result.get('message', '')
-            
-            html_content += f"""
-                <tr>
-                    <td>{data.get('選手名', data.get('氏名', ''))}</td>
-                    <td>{data.get('身長', '')}</td>
-                    <td>{data.get('体重', '')}</td>
-                    <td>{data.get('ポジション', '')}</td>
-                    <td>{data.get('出身校', '')}</td>
-                    <td>{data.get('学年', '')}</td>
-                    <td>{data.get('背番号', '')}</td>
-                    <td>{message}</td>
-                </tr>
-            """
-        
-        html_content += """
-            </table>
-        </body>
-        </html>
-        """
-        
-        return html_content
-    
-    def _generate_all_universities_report(self, reports):
-        """全大学の一括レポートを生成"""
-        html_content = f"""
-        <html>
-        <head>
-            <title>全大学選手データ一覧</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                .header {{ text-align: center; margin-bottom: 30px; }}
-                .university-section {{ margin-bottom: 50px; page-break-before: always; }}
-                .university-section:first-child {{ page-break-before: auto; }}
-                .stats {{ display: flex; justify-content: space-around; margin-bottom: 30px; }}
-                .stat-box {{ text-align: center; padding: 10px; border: 1px solid #ccc; }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-                th {{ background-color: #f2f2f2; }}
-                .university-title {{ background-color: #4CAF50; color: white; padding: 15px; text-align: center; font-size: 18px; font-weight: bold; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>全大学選手データ一覧</h1>
-                <p>生成日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}</p>
-                <p>総大学数: {len(reports)} 大学</p>
-            </div>
-        """
-        
-        # 全大学の統計情報
-        total_players = sum(report['total_players'] for report in reports.values())
-        total_matches = sum(report['match_count'] for report in reports.values())
-        total_not_found = sum(report['not_found_count'] for report in reports.values())
-        overall_match_rate = (total_matches / total_players * 100) if total_players > 0 else 0
-        
-        html_content += f"""
-            <div class="stats">
-                <div class="stat-box">
-                    <h3>総選手数</h3>
-                    <p>{total_players}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>JBA登録あり（〇）</h3>
-                    <p>{total_matches}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>JBA登録なし（×）</h3>
-                    <p>{total_not_found}</p>
-                </div>
-                <div class="stat-box">
-                    <h3>全体一致率</h3>
-                    <p>{overall_match_rate:.1f}%</p>
-                </div>
-            </div>
-        """
-        
-        # 各大学のデータ
-        for univ_name, report in reports.items():
-            html_content += f"""
-                <div class="university-section">
-                    <div class="university-title">{univ_name}</div>
-                    
-                    <div class="stats">
-                        <div class="stat-box">
-                            <h4>総選手数</h4>
-                            <p>{report['total_players']}</p>
-                        </div>
-                        <div class="stat-box">
-                            <h4>JBA登録あり（〇）</h4>
-                            <p>{report['match_count']}</p>
-                        </div>
-                        <div class="stat-box">
-                            <h4>JBA登録なし（×）</h4>
-                            <p>{report['not_found_count']}</p>
-                        </div>
-                        <div class="stat-box">
-                            <h4>一致率</h4>
-                            <p>{report['match_rate']:.1f}%</p>
-                        </div>
-                    </div>
-                    
-                    <h3>選手詳細データ</h3>
-                    <table>
-                        <tr>
-                            <th>選手名</th>
-                            <th>身長</th>
-                            <th>体重</th>
-                            <th>ポジション</th>
-                            <th>出身校</th>
-                            <th>学年</th>
-                            <th>背番号</th>
-                            <th>照合結果</th>
-                        </tr>
-            """
-            
-            for result in report['results']:
-                data = result['original_data']
-                message = result.get('message', '')
-                
-                html_content += f"""
-                    <tr>
-                        <td>{data.get('選手名', data.get('氏名', ''))}</td>
-                        <td>{data.get('身長', '')}</td>
-                        <td>{data.get('体重', '')}</td>
-                        <td>{data.get('ポジション', '')}</td>
-                        <td>{data.get('出身校', '')}</td>
-                        <td>{data.get('学年', '')}</td>
-                        <td>{data.get('背番号', '')}</td>
-                        <td>{message}</td>
-                    </tr>
-                """
-            
-            html_content += """
-                    </table>
-                </div>
-            """
-        
-        html_content += """
-        </body>
-        </html>
-        """
-        
-        return html_content
-    
-    def display_university_report(self, selected_univ, report, game_id, reports):
-        """大学別レポートを表示"""
-        # Markdown removed
-        
-        # Streamlit UI 削除済み: 何もしない
-        return None
-    
     def export_all_university_reports_as_pdf(self, reports, output_path="all_universities_report.pdf", max_rows_per_page=100):
         """全大学レポートをコンパクトなPDFで出力（画像の形式に準拠）"""
-        # A4縦向きで作成
-        doc = SimpleDocTemplate(output_path, pagesize=A4, 
-                               leftMargin=8*mm, rightMargin=8*mm,
-                               topMargin=10*mm, bottomMargin=10*mm)
+        # A4横向きで作成（50行目まで入るように余白を完全にゼロに）
+        # ReportLabでは明示的に0を指定する必要がある
+        # 各大学の総ページ数を事前に計算
+        univ_total_pages = {}  # {univ_name: total_pages}
+        
+        doc = SimpleDocTemplate(output_path, pagesize=landscape(A4), 
+                               leftMargin=0, rightMargin=0,
+                               topMargin=0, bottomMargin=0)  # 余白を完全にゼロにして50行目まで入るように
         styles = getSampleStyleSheet()
         elements = []
         
-        # カスタムスタイル（超コンパクト）
+        # 各大学の総ページ数を事前に計算
+        univ_page_info = {}  # {univ_name: {'total_pages': int, 'start_page': int}}
+        current_page = 1
+        
+        for univ_name, report in reports.items():
+            results = report["results"]
+            results.sort(key=lambda x: x.get('index', 0))
+            total_rows = len(results)
+            max_rows_per_page = 50
+            if total_rows <= max_rows_per_page:
+                rows_per_page = total_rows
+            else:
+                rows_per_page = max_rows_per_page
+            total_pages = (total_rows + rows_per_page - 1) // rows_per_page
+            univ_page_info[univ_name] = {
+                'total_pages': total_pages,
+                'start_page': current_page
+            }
+            current_page += total_pages
+        
+        # 現在のページがどの大学のページかを追跡
+        current_univ_index = 0
+        current_univ_page = 0
+        univ_names_list = list(reports.keys())
+        
+        # ページ番号を表示するコールバック関数
+        def add_page_number(canvas, doc):
+            """各ページの右下にページ番号を追加"""
+            nonlocal current_univ_index, current_univ_page
+            
+            page_num = canvas.getPageNumber()
+            
+            # 現在のページがどの大学のページかを判定
+            if current_univ_index < len(univ_names_list):
+                univ_name = univ_names_list[current_univ_index]
+                univ_info = univ_page_info.get(univ_name, {})
+                total_pages = univ_info.get('total_pages', 1)
+                start_page = univ_info.get('start_page', 1)
+                
+                # 現在の大学内でのページ番号を計算
+                univ_page_num = page_num - start_page + 1
+                
+                # ページ番号を表示（例：1/2）
+                canvas.saveState()
+                canvas.setFont(getattr(self, 'default_font', 'MS-Gothic'), 9)
+                # 横向きA4のサイズ: 297mm x 210mm
+                # 右下の位置: 右端から10mm、下端から5mm
+                page_text = f"{univ_page_num}/{total_pages}"
+                canvas.drawRightString(210*mm - 10*mm, 5*mm, page_text)
+                canvas.restoreState()
+                
+                # 次のページで大学が変わるかチェック
+                if univ_page_num >= total_pages:
+                    current_univ_index += 1
+                    current_univ_page = 0
+        
+        # onPageコールバックを設定
+        doc.onPage = add_page_number
+        
+        # カスタムスタイル（文字を大きく、100行収めるため行間を調整）
         compact_style = ParagraphStyle(
             'Compact',
             parent=styles['Normal'],
-            fontSize=6,
-            leading=6,  # 行間をさらに縮小
+            fontSize=8,  # 6pt → 8ptに増加
+            leading=6,   # 行間を6ptに設定（100行収めるため）
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
-        # 長いテキスト用の小さなフォントスタイル（選手名、カナ名用 - 20文字入るように）
+        # 長いテキスト用のフォントスタイル（選手名、カナ名用）
         small_compact_style = ParagraphStyle(
             'SmallCompact',
             parent=styles['Normal'],
-            fontSize=4.5,  # 選手名・カナ名用（20文字入るように）
-            leading=4.5,   # 行間をさらに縮小
+            fontSize=7.5,  # 4.5pt → 7.5ptに増加
+            leading=6,      # 行間を6ptに設定
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
-        # 出身校用のさらに小さなフォントスタイル（25文字入るように）
+        # 出身校用のフォントスタイル
         extra_small_compact_style = ParagraphStyle(
             'ExtraSmallCompact',
             parent=styles['Normal'],
-            fontSize=4,  # 出身校用（25文字入るように）
-            leading=4,   # 行間をさらに縮小
+            fontSize=7,   # 4pt → 7ptに増加
+            leading=6,     # 行間を6ptに設定
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
 
-        # 学部用の小さなフォントスタイル（15文字入るように）
+        # 学部用のフォントスタイル
         department_compact_style = ParagraphStyle(
             'DepartmentCompact',
             parent=styles['Normal'],
-            fontSize=4.0,  # 学部用（15文字入るように）
-            leading=4.0,   # 行間をさらに縮小
+            fontSize=7,   # 4.0pt → 7ptに増加
+            leading=6,     # 行間を6ptに設定
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
         title_style = ParagraphStyle(
             'TitleCompact',
             parent=styles['Title'],
-            fontSize=8,
-            leading=9,  # 行間をさらに縮小
+            fontSize=10,  # 8pt → 10ptに増加
+            leading=11,   # 行間を調整
             fontName=getattr(self, 'default_font', 'MS-Gothic')
         )
         
-        # ヘッダー情報（最小限）
-        elements.append(Paragraph("🏀 全大学選手データ一覧", title_style))
-        elements.append(Spacer(1, 1))  # スペースを最小限に
+        # タイトルは削除（もっと上に詰めるため）
         
         # デバッグ情報
         print(f"📝 PDF生成開始 - 使用フォント: {getattr(self, 'default_font', 'Unknown')}")
         print(f"📊 レポート数: {len(reports)}")
         
+        # データ数に応じてフォーマットを自動調整（エクセルの1ページに印刷機能のように）
+        # 横向きA4の高さ: 約210mm = 約595pt
+        # マージン: 上0 + 下0 = 0pt（余白完全ゼロ）
+        # 大学名ヘッダー: 約8pt（7pt + leading 8pt、50行目まで入るため）
+        # 利用可能な高さ: 595 - 0 - 8 = 約587pt（余白完全ゼロにより最大限に）
+        available_height_pt = 587
+        
+        # 変更点を収集するリスト
+        all_changes = []  # [{'univ': str, 'player_name': str, 'field': str, 'csv_value': str, 'corrected_value': str, 'source': str}]
+        
         # 各大学のレポート（コンパクトな表形式）
         for i, (univ_name, report) in enumerate(reports.items()):
-            # 大学名ヘッダー（最小限）
-            univ_header = f"【{univ_name}】"
-            elements.append(Paragraph(univ_header, compact_style))
-            elements.append(Spacer(1, 1))  # スペースを最小限に
+            # 大学名ヘッダー（最小限、タイトルは削除して上に詰める）
             
             # 選手データをページング（CSVの順番を保持するため、indexでソート）
             results = report["results"]
             results.sort(key=lambda x: x.get('index', 0))
-            total_pages = (len(results) + max_rows_per_page - 1) // max_rows_per_page
+            
+            # データ行数に応じて1ページあたりの行数を決定
+            # 少ない場合は1ページに全て収める、多い場合は分割
+            total_rows = len(results)
+            if total_rows <= max_rows_per_page:
+                # 1ページに収まる場合、データ数に応じてフォーマットを調整
+                rows_per_page = total_rows
+            else:
+                # 1ページに収まらない場合、max_rows_per_pageで分割
+                rows_per_page = max_rows_per_page
+            
+            total_pages = (total_rows + rows_per_page - 1) // rows_per_page
             
             for page_num in range(total_pages):
-                start_idx = page_num * max_rows_per_page
-                end_idx = min(start_idx + max_rows_per_page, len(results))
+                # 各ページのテーブル直前に大学名とページ情報を表示
+                # 大学名から括弧内の情報（例：「（100行）」）を除去
+                univ_name_clean = univ_name
+                import re
+                # 括弧とその中身を除去（例：「流通経済大学（100行）」→「流通経済大学」）
+                univ_name_clean = re.sub(r'[（(].*?[）)]', '', univ_name_clean).strip()
+                
+                if total_pages > 1:
+                    # 複数ページの場合: 【○○大学】ページ X/Y
+                    univ_header = f"【{univ_name_clean}】ページ {page_num + 1}/{total_pages}"
+                else:
+                    # 1ページのみの場合: 【○○大学】
+                    univ_header = f"【{univ_name_clean}】"
+                
+                # 大学名ヘッダーのフォントサイズを大きくする
+                univ_header_style = ParagraphStyle(
+                    f'UnivHeader_{i}',
+                    parent=styles['Normal'],
+                    fontSize=12,  # 大きくする（7 → 12）
+                    leading=14,   # 行間も大きくする（8 → 14）
+                    fontName=getattr(self, 'default_font', 'MS-Gothic')
+                )
+                elements.append(Paragraph(univ_header, univ_header_style))
+                elements.append(Spacer(1, 2))  # 少しスペースを追加（表示を確認するため）
+                
+                start_idx = page_num * rows_per_page
+                end_idx = min(start_idx + rows_per_page, total_rows)
                 page_results = results[start_idx:end_idx]
                 
-                # テーブルデータ作成（画像の形式に準拠）
-                # ヘッダー行をParagraphに変換（日本語フォントを適用）
-                header_style = ParagraphStyle(
+                # デバッグ: ページ情報を確認
+                # print(f"Page {page_num + 1}/{total_pages}: start_idx={start_idx}, end_idx={end_idx}, page_results count={len(page_results)}")
+                
+                # 固定値を使用（動的ロジックを削除）
+                # フォントサイズ（固定）
+                base_font_size = 7.5
+                small_font_size = 7
+                extra_small_font_size = 6.5
+                dept_font_size = 6.5
+                header_font_size = 7.5
+                small_header_font_size = 5.25  # header_font_size * 0.7
+                
+                # 行の高さと行間（固定）
+                row_height_pt = 7.2
+                leading = 3.6  # row_height_pt * 0.5
+                header_height_pt = 5.5
+                univ_header_height_pt = 16  # フォントサイズ12に対応して高さを大きくする（8 → 16）
+                
+                # 列幅の倍率（固定、中サイズのフォント用）
+                width_multiplier = 1.33  # 2.8 / 2.1
+                
+                # スタイルを一度だけ作成（ページごとではなく）
+                if not hasattr(self, '_pdf_styles_created'):
+                    self._pdf_compact_style = ParagraphStyle(
+                        'Compact',
+                        parent=styles['Normal'],
+                        fontSize=base_font_size,
+                        leading=leading,
+                        fontName=getattr(self, 'default_font', 'MS-Gothic')
+                    )
+                    
+                    self._pdf_small_compact_style = ParagraphStyle(
+                        'SmallCompact',
+                        parent=styles['Normal'],
+                        fontSize=small_font_size,
+                        leading=leading,
+                        fontName=getattr(self, 'default_font', 'MS-Gothic')
+                    )
+                    
+                    self._pdf_extra_small_compact_style = ParagraphStyle(
+                        'ExtraSmallCompact',
+                        parent=styles['Normal'],
+                        fontSize=extra_small_font_size,
+                        leading=leading,
+                        fontName=getattr(self, 'default_font', 'MS-Gothic')
+                    )
+                    
+                    self._pdf_department_compact_style = ParagraphStyle(
+                        'DepartmentCompact',
+                        parent=styles['Normal'],
+                        fontSize=dept_font_size,
+                        leading=leading,
+                        fontName=getattr(self, 'default_font', 'MS-Gothic')
+                    )
+                    
+                    self._pdf_header_style = ParagraphStyle(
                     'HeaderStyle',
                     parent=styles['Normal'],
-                    fontSize=5,
-                    leading=6,
-                    fontName=getattr(self, 'default_font', 'MS-Gothic'),  # 日本語フォントを使用
+                        fontSize=header_font_size,
+                        leading=header_font_size + 0.5,
+                        fontName=getattr(self, 'default_font', 'MS-Gothic'),
                     alignment=1,  # CENTER
-                    textColor=colors.white  # フォント色を白に
-                )
-                header_row = [
-                    Paragraph("No", header_style),
-                    Paragraph("選手名", header_style),
-                    Paragraph("カナ名", header_style),
-                    Paragraph("学部", header_style),
-                    Paragraph("学年", header_style),
-                    Paragraph("身長", header_style),
-                    Paragraph("体重", header_style),
-                    Paragraph("ポジション", header_style),
-                    Paragraph("出身校", header_style),
-                    Paragraph("JBA", header_style)
-                ]
-                data = [header_row]
+                        textColor=colors.white,
+                        spaceAfter=0,
+                        spaceBefore=0
+                    )
+                    
+                    self._pdf_small_header_style = ParagraphStyle(
+                        'SmallHeaderStyle',
+                        parent=styles['Normal'],
+                        fontSize=small_header_font_size,
+                        leading=small_header_font_size + 0.5,
+                        fontName=getattr(self, 'default_font', 'MS-Gothic'),
+                        alignment=1,  # CENTER
+                        textColor=colors.white,
+                        spaceAfter=0,
+                        spaceBefore=0
+                    )
+                    
+                    self._pdf_styles_created = True
+                
+                # スタイルを参照
+                page_compact_style = self._pdf_compact_style
+                page_small_compact_style = self._pdf_small_compact_style
+                page_extra_small_compact_style = self._pdf_extra_small_compact_style
+                page_department_compact_style = self._pdf_department_compact_style
+                page_header_style = self._pdf_header_style
+                page_small_header_style = self._pdf_small_header_style
+                
+                # テーブルデータ作成（画像の形式に準拠）
+                # 1ページ目の場合のみヘッダー行を作成
+                data = []
+                if page_num == 0:
+                    # ヘッダー行をParagraphに変換（日本語フォントを適用、ページごとのスタイルを使用）
+                    # すべてのヘッダーを身長・体重などと同じ小さなフォントサイズに統一
+                    header_row = [
+                        Paragraph("No", page_small_header_style),
+                        Paragraph("選手名", page_small_header_style),
+                        Paragraph("カナ名", page_small_header_style),
+                        Paragraph("学部", page_small_header_style),
+                        Paragraph("学年", page_small_header_style),
+                        Paragraph("身長", page_small_header_style),
+                        Paragraph("体重", page_small_header_style),
+                        Paragraph("ポジ", page_small_header_style),
+                        Paragraph("出身", page_small_header_style),
+                        Paragraph("JBA", page_small_header_style)
+                    ]
+                    data.append(header_row)
+                # 2ページ目以降ではヘッダー行を作成しない（dataは空のリストのまま）
                 
                 for idx, r in enumerate(page_results, start=start_idx+1):
                     d = r["original_data"]
@@ -1864,21 +1801,56 @@ class IntegratedTournamentSystem:
                         status_symbol = "-"
                     
                     # 変更があった場合は赤字で表示（changed_fieldsを使用）
+                    # また、変更点を収集してまとめページ用に保存
                     if r.get("correction"):
                         corrected_data = r["correction"]
                         changed_fields = r.get("changed_fields", set())
                         
+                        # 編集サイトから取得したかどうかを確認
+                        is_edited_from_html = False
+                        if univ_name and player_name:
+                            # HTMLタグを除去してから確認
+                            player_name_clean = re.sub(r'<[^>]+>', '', player_name)
+                            is_edited_from_html = self.edited_player_names.get((univ_name, player_name_clean), False)
+                        
                         # 学部は一切変更しないので、比較処理を削除
+                        
+                        # 元の選手名を取得（変更点記録用）
+                        original_player_name = d.get("選手名", d.get("氏名", ""))
                         
                         # 選手名が変更された場合のみ赤字で表示
                         if '選手名' in changed_fields:
                             corrected_name = corrected_data.get("選手名", player_name)
                             player_name = f'<font color="red">{corrected_name}</font>'
+                            # 変更点を記録
+                            original_name_clean = str(original_player_name) if original_player_name else ""
+                            corrected_name_clean = re.sub(r'<[^>]+>', '', corrected_name)
+                            source = "編" if is_edited_from_html else "JBA"
+                            all_changes.append({
+                                'univ': univ_name,
+                                'player_name': original_name_clean,
+                                'field': '選手名',
+                                'csv_value': original_name_clean,
+                                'corrected_value': corrected_name_clean,
+                                'source': source
+                            })
                         
                         # カナ名が変更された場合のみ赤字で表示
                         if 'カナ名' in changed_fields:
                             corrected_kana = corrected_data.get("カナ名", kana_name)
                             kana_name = f'<font color="red">{corrected_kana}</font>'
+                            # 変更点を記録
+                            original_kana_clean = str(d.get("カナ名", "")) if d.get("カナ名") else ""
+                            corrected_kana_clean = re.sub(r'<[^>]+>', '', corrected_kana)
+                            source = "編" if is_edited_from_html else "JBA"
+                            all_changes.append({
+                                'univ': univ_name,
+                                'player_name': str(original_player_name) if original_player_name else "",
+                                'field': 'カナ名',
+                                'csv_value': original_kana_clean,
+                                'corrected_value': corrected_kana_clean,
+                                'source': source
+                            })
                         
                         # 学年が変更された場合のみ赤字で表示
                         if '学年' in changed_fields:
@@ -1904,6 +1876,17 @@ class IntegratedTournamentSystem:
                             else:
                                 # 一桁の場合は切り捨てた値を使用（赤字表示）
                                 grade = f'<font color="red">{corrected_grade_truncated}</font>' if corrected_grade_truncated else ""
+                                # 変更点を記録
+                                original_grade_clean = str(original_grade) if original_grade else ""
+                                corrected_grade_clean = str(corrected_grade_truncated) if corrected_grade_truncated else ""
+                                all_changes.append({
+                                    'univ': univ_name,
+                                    'player_name': str(original_player_name) if original_player_name else "",
+                                    'field': '学年',
+                                    'csv_value': original_grade_clean,
+                                    'corrected_value': corrected_grade_clean,
+                                    'source': "JBA"
+                                })
                         
                         # 身長が変更された場合のみ赤字で表示
                         if '身長' in changed_fields:
@@ -1911,6 +1894,18 @@ class IntegratedTournamentSystem:
                             # 修正された身長も小数点以下を切り捨て（数字のみ表示）
                             corrected_height = truncate_decimal(corrected_height)
                             height = f'<font color="red">{corrected_height}</font>' if corrected_height else ""
+                            # 変更点を記録
+                            original_height_raw = d.get("身長", "")
+                            original_height_clean = str(original_height_raw).replace('cm', '').strip() if original_height_raw else ""
+                            corrected_height_clean = str(corrected_height) if corrected_height else ""
+                            all_changes.append({
+                                'univ': univ_name,
+                                'player_name': str(original_player_name) if original_player_name else "",
+                                'field': '身長',
+                                'csv_value': original_height_clean,
+                                'corrected_value': corrected_height_clean,
+                                'source': "JBA"
+                            })
                         
                         # 体重が変更された場合のみ赤字で表示
                         if '体重' in changed_fields:
@@ -1918,6 +1913,18 @@ class IntegratedTournamentSystem:
                             # 修正された体重も小数点以下を切り捨て（数字のみ表示）
                             corrected_weight = truncate_decimal(corrected_weight)
                             weight = f'<font color="red">{corrected_weight}</font>' if corrected_weight else ""
+                            # 変更点を記録
+                            original_weight_raw = d.get("体重", "")
+                            original_weight_clean = str(original_weight_raw).replace('kg', '').strip() if original_weight_raw else ""
+                            corrected_weight_clean = str(corrected_weight) if corrected_weight else ""
+                            all_changes.append({
+                                'univ': univ_name,
+                                'player_name': str(original_player_name) if original_player_name else "",
+                                'field': '体重',
+                                'csv_value': original_weight_clean,
+                                'corrected_value': corrected_weight_clean,
+                                'source': "JBA"
+                            })
                         
                         # ポジション・出身校はCSVのデータをそのまま使用（変更しないので赤字表示不要）
                     
@@ -1971,307 +1978,285 @@ class IntegratedTournamentSystem:
                         is_english = not has_japanese and bool(re.match(r'^[A-Za-z\s\.\-\'"]+$', cell_clean)) if cell_clean else False
                         
                         # 英語の場合はHelvetica、日本語の場合は日本語フォント
-                        # サイズ感と左揃えは日本語と同じにする
+                        # サイズ感と左揃えは日本語と同じにする（ページごとのスタイルを使用）
                         if is_english:
                             # 英語用スタイル（Helvetica、日本語と同じサイズ・左揃え）
                             if i == 0:  # No(0)の列 - 選手名と同じサイズ
                                 english_style = ParagraphStyle(
-                                    'EnglishStyle0',
+                                    f'EnglishStyle0_{page_num}',
                                     parent=styles['Normal'],
-                                    fontSize=small_compact_style.fontSize,
-                                    leading=small_compact_style.leading,
+                                    fontSize=page_small_compact_style.fontSize,
+                                    leading=page_small_compact_style.leading,
                                     fontName='Helvetica',
                                     alignment=0  # LEFT（日本語と同じ）
                                 )
                             elif i in [1, 2]:  # 選手名(1)、カナ名(2)の列
                                 english_style = ParagraphStyle(
-                                    'EnglishStyle12',
+                                    f'EnglishStyle12_{page_num}',
                                     parent=styles['Normal'],
-                                    fontSize=small_compact_style.fontSize,
-                                    leading=small_compact_style.leading,
+                                    fontSize=page_small_compact_style.fontSize,
+                                    leading=page_small_compact_style.leading,
                                     fontName='Helvetica',
                                     alignment=0  # LEFT（日本語と同じ）
                                 )
                             elif i == 3:  # 学部(3)の列
                                 english_style = ParagraphStyle(
-                                    'EnglishStyle3',
+                                    f'EnglishStyle3_{page_num}',
                                     parent=styles['Normal'],
-                                    fontSize=department_compact_style.fontSize,
-                                    leading=department_compact_style.leading,
+                                    fontSize=page_department_compact_style.fontSize,
+                                    leading=page_department_compact_style.leading,
                                     fontName='Helvetica',
                                     alignment=0  # LEFT（日本語と同じ）
                                 )
                             elif i == 8:  # 出身校(8)の列
                                 english_style = ParagraphStyle(
-                                    'EnglishStyle8',
+                                    f'EnglishStyle8_{page_num}',
                                     parent=styles['Normal'],
-                                    fontSize=extra_small_compact_style.fontSize,
-                                    leading=extra_small_compact_style.leading,
+                                    fontSize=page_extra_small_compact_style.fontSize,
+                                    leading=page_extra_small_compact_style.leading,
                                     fontName='Helvetica',
                                     alignment=0  # LEFT（日本語と同じ）
                                 )
+                            elif i in [4, 5, 6]:  # 学年(4)、身長(5)、体重(6)の列 - 中央揃え
+                                english_style = ParagraphStyle(
+                                    f'EnglishStyle456_{page_num}',
+                                    parent=styles['Normal'],
+                                    fontSize=page_compact_style.fontSize,
+                                    leading=page_compact_style.leading,
+                                    fontName='Helvetica',
+                                    alignment=1  # CENTER（中央揃え）
+                                )
                             else:
                                 english_style = ParagraphStyle(
-                                    'EnglishStyleOther',
+                                    f'EnglishStyleOther_{page_num}',
                                     parent=styles['Normal'],
-                                    fontSize=compact_style.fontSize,
-                                    leading=compact_style.leading,
+                                    fontSize=page_compact_style.fontSize,
+                                    leading=page_compact_style.leading,
                                     fontName='Helvetica',
                                     alignment=0  # LEFT（日本語と同じ）
                                 )
                             formatted_row_data.append(Paragraph(cell_str, english_style))
                         else:
-                            # 日本語用スタイル（既存のスタイルを使用）
+                            # 日本語用スタイル（ページごとのスタイルを使用）
                             if i == 0:  # No(0)の列 - 選手名と同じサイズ
-                                formatted_row_data.append(Paragraph(cell_str, small_compact_style))
+                                formatted_row_data.append(Paragraph(cell_str, page_small_compact_style))
                             elif i in [1, 2]:  # 選手名(1)、カナ名(2)の列
-                                formatted_row_data.append(Paragraph(cell_str, small_compact_style))
+                                formatted_row_data.append(Paragraph(cell_str, page_small_compact_style))
                             elif i == 3:  # 学部(3)の列
-                                formatted_row_data.append(Paragraph(cell_str, department_compact_style))
+                                formatted_row_data.append(Paragraph(cell_str, page_department_compact_style))
+                            elif i in [4, 5, 6]:  # 学年(4)、身長(5)、体重(6)の列 - 中央揃え
+                                # 中央揃え用のスタイルを作成
+                                center_style = ParagraphStyle(
+                                    f'CenterStyle456_{page_num}',
+                                    parent=page_compact_style,
+                                    alignment=1  # CENTER（中央揃え）
+                                )
+                                formatted_row_data.append(Paragraph(cell_str, center_style))
                             elif i == 8:  # 出身校(8)の列
-                                formatted_row_data.append(Paragraph(cell_str, extra_small_compact_style))
+                                formatted_row_data.append(Paragraph(cell_str, page_extra_small_compact_style))
                             else:
-                                formatted_row_data.append(Paragraph(cell_str, compact_style))
+                                formatted_row_data.append(Paragraph(cell_str, page_compact_style))
                     row_data = formatted_row_data
                     
                     data.append(row_data)
                 
-                # テーブル作成（A4縦向き最適化）- 文字数と列幅のバランスを最適化
-                col_widths = [16*mm, 35*mm, 35*mm, 26*mm, 8*mm, 12*mm, 10*mm, 15*mm, 40*mm, 8*mm]
+                # 2ページ目以降の場合、ヘッダー行を確実に除外
+                # dataの最初の要素がヘッダー行（Paragraph("No", ...)など）かどうかを確認
+                if page_num > 0 and len(data) > 0:
+                    first_row = data[0]
+                    if isinstance(first_row, list) and len(first_row) > 0:
+                        first_cell = first_row[0]
+                        # Paragraphオブジェクトの場合、そのテキストを確認
+                        if hasattr(first_cell, 'text'):
+                            first_cell_text = str(first_cell.text) if first_cell.text else ""
+                            # ヘッダー行のキーワードが含まれている場合は削除
+                            if any(keyword in first_cell_text for keyword in ['No', '選手名', 'カナ名', '学部', '学年', '身長', '体重', 'ポジ', '出身', 'JBA']):
+                                data = data[1:]
+                        # または、Paragraphオブジェクトのtext属性がNoneの場合もヘッダー行の可能性がある
+                        elif hasattr(first_cell, 'text') and first_cell.text is None:
+                            # 念のため、最初の行を削除
+                            data = data[1:]
                 
-                # 行の高さを固定で設定（final_100_output.pdfと同じ設定）
-                row_heights = [10] + [7] * (len(data) - 1)  # ヘッダー10pt、データ行7pt
+                # テーブル作成（A4横向き最適化）- フォントサイズに応じて列幅を動的に調整
+                # 基準列幅（6ptの時の幅）
+                # 身長・体重: 学年と同じ幅（8mm、横書きで表示されるように）
+                # 学年: 2文字が横書きで入る（8mm、縦にならないように広げる）
+                # ポジション: 短い文字列が入る（5mm、PG/SG/SF/PF/Cなど）
+                # JBA: 1文字が入る（5mm、〇/×/△、少し余裕を持たせる）
+                # 選手名・カナ名: 24文字が入るように調整（4文字分拡大）
+                # 6ptの時: 日本語1文字 ≈ 2.5mm → 24文字 × 2.5mm = 60mm
+                # 出身校: 英語50文字、日本語30文字が入るように調整（選手名・カナ名を広げるため縮小）
+                # 6ptの時: 英語1文字 ≈ 1.25mm → 50文字 × 1.25mm = 62.5mm
+                # 6ptの時: 日本語1文字 ≈ 2.5mm → 30文字 × 2.5mm = 75mm
+                # 両方が同時に入る可能性を考慮: 62.5mm + 75mm = 137.5mm + 余裕-17.5mm = 約120mm（選手名・カナ名を広げるため20mm縮小）
+                # [No, 選手名, カナ名, 学部, 学年, 身長, 体重, ポジション, 出身校, JBA]
+                base_col_widths = [16*mm, 60*mm, 60*mm, 26*mm, 8*mm, 8*mm, 8*mm, 5*mm, 120*mm, 5*mm]
+                # フォントサイズに応じて列幅を拡大（細かい文字の時と同じ文字数が入るように）
+                col_widths = [w * width_multiplier for w in base_col_widths]
                 
-                table = Table(data, colWidths=col_widths, rowHeights=row_heights, repeatRows=1)
-                table.setStyle(TableStyle([
-                # ヘッダー
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),  # 中央揃えに変更
-                # ヘッダー行はParagraphで作成しているため、フォントはParagraph内で設定済み
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 2),  # ヘッダーパディング（final_100_outputと同じ）
+                # 横向きA4の幅（約297mm）- 左右マージン（8mm×2）= 約281mm
+                # 列幅の合計が281mmを超えないように調整
+                total_width = sum(col_widths)
+                max_width = 281 * mm
+                if total_width > max_width:
+                    # 列幅を縮小して収める
+                    scale_factor = max_width / total_width
+                    col_widths = [w * scale_factor for w in col_widths]
                 
-                # データ行
-                ("FONTNAME", (0, 1), (-1, -1), getattr(self, 'default_font', 'MS-Gothic')),
-                ("FONTSIZE", (0, 1), (-1, -1), 4),  # データフォントサイズ（final_100_outputと同じ）
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+                # パディング（固定値）
+                padding = 0.11  # row_height_pt * 0.015 ≈ 0.11
+                header_padding = 0.6  # header_font_size * 0.08 ≈ 0.6
                 
-                # 罫線
-                ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),  # 罫線を細く
-                ("LINEBELOW", (0, 0), (-1, 0), 1, colors.black),
+                # 行の高さ（固定値）
+                # leadingとpaddingを含めた実際の行の高さ
+                # 実際の行の高さ = row_height_pt + leading + padding*2 = 7.2 + 3.6 + 0.11*2 = 11.02pt
+                actual_row_height = row_height_pt + leading + padding * 2
+                # 2ページ目以降の場合はヘッダー行の高さを含めない
+                if page_num == 0:
+                    header_row_height = header_height_pt
+                    row_heights = [header_row_height] + [actual_row_height] * (len(data) - 1)
+                    # 1ページ目はrepeatRowsを指定しない（デフォルト）
+                    table = Table(data, colWidths=col_widths, rowHeights=row_heights)
+                else:
+                    row_heights = [actual_row_height] * len(data)
+                    # 2ページ目以降はrepeatRowsを指定せず、dataにヘッダー行を含めないことで自動繰り返しを防ぐ
+                    table = Table(data, colWidths=col_widths, rowHeights=row_heights)
+                    # 念のため、repeatRows属性を明示的にNoneに設定（ReportLabの内部処理を回避）
+                    table.repeatRows = None
+                # テーブルスタイルを構築（2ページ目以降はヘッダー行のスタイルを除外）
+                table_style = []
+                
+                # 1ページ目の場合のみヘッダー行のスタイルを追加
+                if page_num == 0:
+                    table_style.extend([
+                        # ヘッダー
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                        # ヘッダー行はParagraphで作成しているため、フォントはParagraph内で設定済み
+                        ("TOPPADDING", (0, 0), (-1, 0), header_padding),  # ヘッダー上部パディング（フォントサイズに応じて調整）
+                        ("BOTTOMPADDING", (0, 0), (-1, 0), header_padding),  # ヘッダー下部パディング（フォントサイズに応じて調整）
+                    ])
+                    data_start_row = 1
+                else:
+                    data_start_row = 0
+                
+                table_style.extend([
+                    # デフォルトは左揃え（全行）
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    # 学年(4)、身長(5)、体重(6)のデータ行だけ中央揃え
+                    ("ALIGN", (4, data_start_row), (4, -1), "CENTER"),  # 学年（データ行のみ）
+                    ("ALIGN", (5, data_start_row), (5, -1), "CENTER"),  # 身長（データ行のみ）
+                    ("ALIGN", (6, data_start_row), (6, -1), "CENTER"),  # 体重（データ行のみ）
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),  # 中央揃えに変更
                     
-                # パディング調整（文字がテーブル内に正しく配置されるように）
-                ("TOPPADDING", (0, 1), (-1, -1), 2),  # 上部パディングを調整
-                ("BOTTOMPADDING", (0, 1), (-1, -1), 2),  # 下部パディングを調整
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),  # 左パディングを調整
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),  # 右パディングを調整
-                ]))
+                    # データ行（固定フォントサイズ）
+                    ("FONTNAME", (0, data_start_row), (-1, -1), getattr(self, 'default_font', 'MS-Gothic')),
+                    ("FONTSIZE", (0, data_start_row), (-1, -1), base_font_size),  # 固定フォントサイズ
+                    ("ROWBACKGROUNDS", (0, data_start_row), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+                ])
+                
+                table_style.extend([
+                    # 罫線
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),  # 罫線を細く
+                    # ラベルのすぐ下の濃い黒線を削除（LINEBELOWを削除）
+                    
+                    # パディング調整
+                    ("TOPPADDING", (0, data_start_row), (-1, -1), padding),  # 上部パディング
+                    ("BOTTOMPADDING", (0, data_start_row), (-1, -1), padding),  # 下部パディング
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0.2),  # 左パディングを最小限に（50行目まで入るため：0.3 → 0.2）
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0.2),  # 右パディングを最小限に（50行目まで入るため：0.3 → 0.2）
+                ])
+                
+                table.setStyle(TableStyle(table_style))
                 
                 elements.append(table)
                 
                 # ページ区切り（最後のページ以外）
                 if page_num < total_pages - 1:
-                    elements.append(Spacer(1, 5))  # スペースを削減
-                    page_info = f"(ページ {page_num+1}/{total_pages})"
-                    elements.append(Paragraph(page_info, compact_style))
                     elements.append(PageBreak())
             
             # 大学区切り（最後の大学以外）
             if i < len(reports) - 1:
                 elements.append(PageBreak())
         
+        # 変更点のまとめページを追加
+        if all_changes:
+            elements.append(PageBreak())
+            elements.append(Spacer(1, 20))
+            
+            # タイトル
+            title_style = ParagraphStyle(
+                'ChangeSummaryTitle',
+                parent=styles['Normal'],
+                fontSize=16,
+                leading=20,
+                fontName=getattr(self, 'default_font', 'MS-Gothic'),
+                alignment=1,  # CENTER
+                spaceAfter=20
+            )
+            elements.append(Paragraph("変更点まとめ", title_style))
+            elements.append(Spacer(1, 10))
+            
+            # 変更点をテーブル形式で表示
+            change_data = []
+            change_header = [
+                Paragraph("大学名", page_small_header_style),
+                Paragraph("選手名", page_small_header_style),
+                Paragraph("変更内容", page_small_header_style)
+            ]
+            change_data.append(change_header)
+            
+            for change in all_changes:
+                univ = change['univ']
+                player = change['player_name']
+                field = change['field']
+                csv_val = change['csv_value']
+                corrected_val = change['corrected_value']
+                source = change['source']
+                
+                # 変更内容のフォーマット
+                if source == "編":
+                    change_text = f"CSV {csv_val}→編 {corrected_val}"
+                else:
+                    change_text = f"CSV {csv_val}→JBA {corrected_val}"
+                
+                change_row = [
+                    Paragraph(univ, page_compact_style),
+                    Paragraph(player, page_compact_style),
+                    Paragraph(change_text, page_compact_style)
+                ]
+                change_data.append(change_row)
+            
+            # 変更点テーブルの列幅（横向きA4に合わせて調整）
+            change_col_widths = [80*mm, 60*mm, 150*mm]
+            change_table = Table(change_data, colWidths=change_col_widths, repeatRows=1)
+            change_table.setStyle(TableStyle([
+                # ヘッダー
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTNAME", (0, 0), (-1, 0), getattr(self, 'default_font', 'MS-Gothic')),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("TOPPADDING", (0, 0), (-1, 0), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+                # データ行
+                ("FONTNAME", (0, 1), (-1, -1), getattr(self, 'default_font', 'MS-Gothic')),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
+                ("TOPPADDING", (0, 1), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(change_table)
+        
         # PDF生成
         doc.build(elements)
         print(f"📄 PDF生成完了: {output_path} (フォント: {getattr(self, 'default_font', 'Unknown')})")
         return output_path
     
-    def start_pdf_generation_background(self, reports, output_filename=None):
-        """reports をバックグラウンドでPDF化するジョブを開始する（別プロセス版）。"""
-        if output_filename is None:
-            output_filename = os.path.join(self.temp_dir, f"all_universities_report_{int(time.time())}.zip")
-        job_id = str(uuid.uuid4())
-        job_meta = {
-            "job_id": job_id,
-            "status": "queued",
-            "progress": 0.0,
-            "message": "queued",
-            "output_path": output_filename,
-            "error": None,
-            "created_at": datetime.utcnow().isoformat() + "Z"
-        }
-        job_meta_path = os.path.join(self.temp_dir, f"pdf_job_{job_id}.json")
-        with open(job_meta_path, "w", encoding="utf-8") as f:
-            json.dump(job_meta, f, ensure_ascii=False, indent=2)
-
-        # --- 安全対策: reports をプリシリアライズ（pickle での不整合を避ける） ---
-        try:
-            serializable_reports = json.loads(json.dumps(reports, default=str))
-        except Exception:
-            # 最低限: 文字列化に失敗したらそのまま渡す（pickle に任せる）
-            serializable_reports = reports
-
-        # --- spawn コンテキストでプロセスを作成（ワーカー未提供なら同期生成にフォールバック） ---
-        if pdf_worker_main is None:
-            # フォールバック: 同期でPDF生成を実行（最低限の動作確保）
-            try:
-                # フォールバックとして全大学PDFを単発生成（reports 構造に依存）
-                output_pdf = output_filename if output_filename.endswith('.pdf') else output_filename.replace('.zip', '.pdf')
-                self.export_all_university_reports_as_pdf(reports=reports, output_path=output_pdf)
-                self._write_job_meta(job_meta_path, status="done", progress=1.0, message="PDF generated (fallback)", output_path=output_pdf)
-            except Exception as e:
-                self._write_job_meta(job_meta_path, status="error", message=f"Fallback PDF generation failed: {e}", error=str(e))
-                raise
-        else:
-            try:
-                ctx = multiprocessing.get_context("spawn")
-                proc = ctx.Process(
-                    target=pdf_worker_main,
-                    args=(serializable_reports, output_filename, job_meta_path),
-                    daemon=False
-                )
-                proc.start()
-            except Exception as e:
-                # 失敗したら job_meta にエラーを書き込む
-                self._write_job_meta(job_meta_path, status="error", message=f"Failed to start worker: {e}", error=str(e))
-                raise
-
-        return job_meta_path
-
-    def _write_job_meta(self, job_meta_path, **kwargs):
-        """job_meta JSON を上書き更新"""
-        try:
-            # read existing
-            meta = {}
-            if os.path.exists(job_meta_path):
-                with open(job_meta_path, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            meta.update(kwargs)
-            with open(job_meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            # ロギングのみ
-            print(f"Failed to write job meta: {e}")
-
-    
-    def export_single_university_report_as_pdf(self, university_name, report, output_path=None):
-        """単一大学のレポートをPDF出力"""
-        if output_path is None:
-            output_path = f"{university_name}_選手データ.pdf"
-        
-        doc = SimpleDocTemplate(output_path, pagesize=A4)
-        styles = getSampleStyleSheet()
-        elements = []
-        
-        # ヘッダー情報
-        elements.append(Paragraph(f"🏫 {university_name} 選手データ", styles["Title"]))
-        elements.append(Paragraph(f"生成日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}", styles["Normal"]))
-        elements.append(Spacer(1, 20))
-        
-        # 統計情報
-        elements.append(Paragraph("📊 統計情報", styles["Heading2"]))
-        elements.append(Paragraph(f"総選手数: {report['total_players']}", styles["Normal"]))
-        elements.append(Paragraph(f"JBA登録あり（〇）: {report['match_count']}", styles["Normal"]))
-        elements.append(Paragraph(f"JBA登録なし（×）: {report['not_found_count']}", styles["Normal"]))
-        elements.append(Paragraph(f"一致率: {report['match_rate']:.1f}%", styles["Normal"]))
-        elements.append(Spacer(1, 20))
-        
-        # 選手データテーブル
-        elements.append(Paragraph("選手詳細データ", styles["Heading2"]))
-        
-        # テーブルデータ作成（軽量化）
-        data = [["選手名", "身長", "体重", "ポジション", "出身校", "学年", "背番号", "照合結果"]]
-        for r in report["results"]:
-            d = r["original_data"]
-            status = r.get("status", "unknown")
-            
-            # ステータスに応じて色分け（〇 or ×）
-            status_text = ""
-            if status == "match":
-                status_text = "〇"
-            elif status == "not_found":
-                status_text = "×"
-            else:
-                status_text = f"❓ {status}"
-            
-            # テキストを短縮してPDF軽量化
-            data.append([
-                self._truncate_text(d.get("選手名", d.get("氏名", "")), 20),
-                self._truncate_text(d.get("身長", ""), 10),
-                self._truncate_text(d.get("体重", ""), 10),
-                self._truncate_text(d.get("ポジション", ""), 15),
-                self._truncate_text(d.get("出身校", ""), 25),
-                self._truncate_text(d.get("学年", ""), 10),
-                self._truncate_text(d.get("背番号", ""), 10),
-                self._truncate_text(status_text, 20)
-            ])
-        
-        # テーブル作成
-        table = Table(data, repeatRows=1)
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-            ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ]))
-        elements.append(table)
-        
-        # PDF生成
-        doc.build(elements)
-        return output_path
-
-    def generate_pdfs_by_university(self, df, output_dir, filename_prefix="tournament"):
-        """大学ごとにPDFを生成（1大学1ページ）"""
-        if df is None or df.empty:
-            return None
-
-        # 大学ごとにグループ化
-        universities = df['大学名'].unique() if '大学名' in df.columns else ["Unknown"]
-        pdf_files = []
-
-        for univ in universities:
-            if '大学名' in df.columns:
-                univ_data = df[df['大学名'] == univ].copy()
-            else:
-                univ_data = df.copy()
-
-            # 大学のレポートを作成
-            report = {
-                'university': univ,
-                'total_players': len(univ_data),
-                'match_count': 0,  # 簡易版
-                'not_found_count': 0,
-                'match_rate': 0.0,
-                'results': []  # 簡易版
-            }
-
-            # 選手データを結果形式に変換
-            for index, row in univ_data.iterrows():
-                result = {
-                    'index': index,
-                    'original_data': row.to_dict(),
-                    'status': 'unknown',
-                    'message': '処理済み'
-                }
-                report['results'].append(result)
-
-            # PDF生成
-            pdf_filename = f"{filename_prefix}_{univ}.pdf"
-            pdf_path = os.path.join(output_dir, pdf_filename)
-            
-            try:
-                self.export_single_university_report_as_pdf(univ, report, pdf_path)
-                pdf_files.append(pdf_path)
-                print(f"✅ PDF生成完了: {pdf_path}")
-            except Exception as e:
-                print(f"❌ PDF生成エラー ({univ}): {e}")
-
-        return pdf_files
 
 
 def main():

@@ -37,88 +37,16 @@ def run_pdf_generation_job(job_id: str, universities: List[str], credentials: Op
     """
     バックグラウンドでPDF生成処理を実行
     
-    TODO: 既存の integrated_system_worker.py の処理をここに移植
-    - st.* を logging に置き換え
-    - 進捗を job_meta に書き込み
-    - 生成したPDFのパスを output_path に設定
+    NOTE: この機能は未実装です。大会ID処理（/tournament）を使用してください。
     """
-    job_file = f"temp_results/job_{job_id}.json"
+    from supabase_helper import get_supabase_helper
+    supabase = get_supabase_helper()
     
     try:
-        # ジョブメタ初期化
-        meta = {
-            "job_id": job_id,
-            "status": "processing",
-            "progress": 0.0,
-            "message": "PDF生成を開始しました",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "metadata": {
-                "universities": universities,
-                "total_count": len(universities),
-                "options": options or {}
-            }
-        }
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        
-        # TODO: 既存のPDF生成処理を実行
-        # from worker.integrated_system_worker import generate_pdfs_background
-        # result = generate_pdfs_background(universities, credentials, job_id=job_id)
-        
-        # 仮の処理（実際には integrated_system_worker.py の処理を移植）
-        import time
-        output_files = []
-        
-        for i, univ in enumerate(universities):
-            time.sleep(2)  # 仮のPDF生成時間
-            
-            progress = (i + 1) / len(universities)
-            meta["progress"] = progress
-            meta["message"] = f"{univ}のPDFを生成中... ({i+1}/{len(universities)})"
-            meta["updated_at"] = datetime.now().isoformat()
-            
-            with open(job_file, "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=2)
-            
-            # 仮のPDFファイルパス
-            pdf_path = f"outputs/{univ}_members_{job_id}.pdf"
-            output_files.append(pdf_path)
-            
-            logger.info(f"Job {job_id}: Generated PDF for {univ} ({progress*100:.1f}%)")
-        
-        # ZIPにまとめる（複数大学の場合）
-        if len(universities) > 1:
-            zip_path = f"outputs/members_all_{job_id}.zip"
-            # TODO: ZIPファイル作成処理
-            final_output = zip_path
-        else:
-            final_output = output_files[0] if output_files else None
-        
-        # 完了
-        meta["status"] = "done"
-        meta["progress"] = 1.0
-        meta["message"] = f"PDF生成完了: {len(universities)}大学"
-        meta["updated_at"] = datetime.now().isoformat()
-        meta["output_path"] = final_output
-        meta["metadata"]["output_files"] = output_files
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"Job {job_id} completed successfully: {final_output}")
-        
+        supabase.update_job(job_id, status="error", message="この機能は未実装です。大会ID処理（/tournament）を使用してください。")
+        logger.warning(f"PDF generation job {job_id} attempted but not implemented")
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}", exc_info=True)
-        
-        # エラー情報を保存
-        meta["status"] = "error"
-        meta["error"] = str(e)
-        meta["updated_at"] = datetime.now().isoformat()
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
 
 @router.post("/", response_model=PdfResponse)
 async def generate_pdf(req: PdfRequest, background_tasks: BackgroundTasks):

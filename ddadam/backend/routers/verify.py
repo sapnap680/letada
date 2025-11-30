@@ -40,72 +40,16 @@ def run_verification_job(job_id: str, universities: List[str], credentials: Opti
     """
     バックグラウンドで照合処理を実行
     
-    TODO: 既存の integrated_system.py の処理をここに移植
-    - st.* を logging に置き換え
-    - 進捗を job_meta に書き込み
+    NOTE: この機能は未実装です。大会ID処理（/tournament）を使用してください。
     """
-    job_file = f"temp_results/job_{job_id}.json"
+    from supabase_helper import get_supabase_helper
+    supabase = get_supabase_helper()
     
     try:
-        # ジョブメタ初期化
-        meta = {
-            "job_id": job_id,
-            "status": "processing",
-            "progress": 0.0,
-            "message": "照合処理を開始しました",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "metadata": {
-                "universities": universities,
-                "total_count": len(universities)
-            }
-        }
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        
-        # TODO: 既存の照合処理を実行
-        # system = IntegratedTournamentSystem(max_workers=workers)
-        # system.login(credentials["email"], credentials["password"])
-        # results = system.process_universities(universities, job_id=job_id)
-        
-        # 仮の処理（実際には integrated_system.py の処理を移植）
-        import time
-        for i, univ in enumerate(universities):
-            time.sleep(1)  # 仮の処理時間
-            
-            progress = (i + 1) / len(universities)
-            meta["progress"] = progress
-            meta["message"] = f"{univ}を処理中... ({i+1}/{len(universities)})"
-            meta["updated_at"] = datetime.now().isoformat()
-            
-            with open(job_file, "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=2)
-            
-            logger.info(f"Job {job_id}: Processed {univ} ({progress*100:.1f}%)")
-        
-        # 完了
-        meta["status"] = "done"
-        meta["progress"] = 1.0
-        meta["message"] = f"照合完了: {len(universities)}大学"
-        meta["updated_at"] = datetime.now().isoformat()
-        meta["output_path"] = f"outputs/verification_{job_id}.json"
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"Job {job_id} completed successfully")
-        
+        supabase.update_job(job_id, status="error", message="この機能は未実装です。大会ID処理（/tournament）を使用してください。")
+        logger.warning(f"Verification job {job_id} attempted but not implemented")
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}", exc_info=True)
-        
-        # エラー情報を保存
-        meta["status"] = "error"
-        meta["error"] = str(e)
-        meta["updated_at"] = datetime.now().isoformat()
-        
-        with open(job_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
 
 @router.post("/", response_model=VerifyResponse)
 async def verify_universities(req: VerifyRequest, background_tasks: BackgroundTasks):
