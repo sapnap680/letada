@@ -207,6 +207,15 @@ async def start_tournament_job(
 
         logger.info(f"✅ Supabaseにジョブを作成: {job_id} - 大会ID: {req.game_id}")
         
+        # BackgroundTasksで直接処理を開始（Worker Service不要）
+        background_tasks.add_task(
+            run_tournament_job,
+            job_id=job_id,
+            game_id=req.game_id,
+            jba_credentials=req.jba_credentials,
+            generate_pdf=req.generate_pdf
+        )
+        
         return TournamentResponse(
             status="queued",
             job_id=job_id,

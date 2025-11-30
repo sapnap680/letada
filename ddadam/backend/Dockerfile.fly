@@ -1,0 +1,30 @@
+# Fly.io用 Dockerfile（Worker Service対応）
+FROM python:3.11-slim
+
+# 作業ディレクトリ
+WORKDIR /app
+
+# システムパッケージの更新と日本語フォントのインストール
+RUN apt-get update && apt-get install -y \
+    fonts-noto-cjk \
+    fonts-dejavu-core \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+# 依存ライブラリをコピーしてインストール
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# アプリケーションコードをコピー
+COPY backend/ .
+
+# 必要なディレクトリを作成
+RUN mkdir -p outputs temp_results worker
+
+# ポート公開（Web Service用）
+EXPOSE 8000
+
+# デフォルトコマンド（Web Service用）
+# Worker Serviceは fly.toml で別途指定
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
