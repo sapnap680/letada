@@ -1,63 +1,43 @@
-# Fly.io 設定ファイル
-# Web Service + Worker Service の両方を実行
-
-app = "jba-verification"  # アプリ名（変更してください）
-primary_region = "nrt"  # 東京リージョン
+app = "letada-rgwgow"
+primary_region = "nrt"
 
 [build]
-  dockerfile = "backend/Dockerfile"
+  dockerfile = "ddadam/backend/Dockerfile"
   build_args = []
-  
-  # ビルドコンテキストを明示的に指定（プロジェクトルート）
-  [build.buildpacks]
-    builder = "heroku/buildpacks:20"
 
 [env]
   PORT = "8000"
   PYTHONUNBUFFERED = "1"
 
 # Web Service（FastAPI）
-[[services]]
-  processes = ["web"]  # web プロセスのみをサービスとして公開
-  internal_port = 8000
-  protocol = "tcp"
-  auto_stop_machines = false  # 無料プランでもスリープなし
+[http_service]
   auto_start_machines = true
-  min_machines_running = 0  # 無料プラン用（0にするとスリープするが、リクエストで自動起動）
-  max_machines_running = 1
+  auto_stop_machines = false
+  force_https = true
+  internal_port = 8000
+  min_machines_running = 0
+  processes = ["web"]
 
-  [[services.ports]]
-    handlers = ["http"]
-    port = 80
-    force_https = true
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
-
-  [services.concurrency]
-    type = "requests"
-    hard_limit = 25
-    soft_limit = 20
-
-  [[services.http_checks]]
+  [[http_service.checks]]
     interval = "10s"
     timeout = "2s"
     grace_period = "5s"
     method = "GET"
     path = "/health"
-    protocol = "http"
 
 # Worker Service（バックグラウンドジョブ処理）
-# Fly.ioでは複数プロセスを設定する場合、別のマシンとして起動する
 [processes]
   web = "cd /app && uvicorn main:app --host 0.0.0.0 --port 8000"
   worker = "cd /app && python -m worker.worker_runner"
 
 # Worker プロセスの設定
 [processes.worker]
-  auto_stop_machines = false  # 無料プランでもスリープなし
   auto_start_machines = true
-  min_machines_running = 0  # 無料プラン用（ジョブがない時はスリープ）
-  max_machines_running = 1
+  auto_stop_machines = false
+  min_machines_running = 0
 
+# VM設定
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024
