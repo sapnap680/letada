@@ -7,6 +7,10 @@ primary_region = "nrt"  # 東京リージョン
 [build]
   dockerfile = "backend/Dockerfile"
   build_args = []
+  
+  # ビルドコンテキストを明示的に指定（プロジェクトルート）
+  [build.buildpacks]
+    builder = "heroku/buildpacks:20"
 
 [env]
   PORT = "8000"
