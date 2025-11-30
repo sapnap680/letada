@@ -12,12 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 依存ライブラリをコピーしてインストール
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # アプリケーションコードをコピー
-COPY . .
+COPY backend/ .
 
 # 必要なディレクトリを作成
 RUN mkdir -p outputs temp_results worker
