@@ -200,6 +200,36 @@ class IntegratedTournamentSystem:
         else:
             return text[:max_chars-2] + ".."
     
+    def _normalize_name_text(self, text: str) -> str:
+        """
+        氏名・カナ名用の正規化:
+        - 全角/半角を統一（NFKC）
+        - 全角スペースを半角スペースに
+        - 伸ばし棒を「ー」に統一（-, ｰ, ―, − などを含む）
+        - 丸括弧「()」「（）」とその中身を削除
+        - 記号（・, ･）を削除
+        - 連続スペースを1つに
+        """
+        if text is None:
+            return ""
+        s = str(text)
+        # 全角/半角正規化
+        s = unicodedata.normalize("NFKC", s)
+        # 全角スペースを半角スペースに
+        s = s.replace("\u3000", " ")
+        # 伸ばし棒を「ー」に統一（ハイフン/ダッシュ類も含めて）
+        for ch in ["-", "ｰ", "‐", "―", "—", "−"]:
+            s = s.replace(ch, "ー")
+        # 丸括弧とその中身を削除
+        s = re.sub(r"\([^)]*\)", "", s)        # 半角()
+        s = re.sub(r"（[^）]*）", "", s)        # 全角（）
+        # 記号削除（中黒など）
+        for ch in ["・", "･"]:
+            s = s.replace(ch, "")
+        # 余分なスペースを1つに
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+    
     def _get_cached_data(self, key):
         """キャッシュからデータを取得"""
         with self._cache_lock:
@@ -737,29 +767,24 @@ class IntegratedTournamentSystem:
                                 corrected_data['学年'] = jba_grade
                                 changed_fields.add('学年')
                         
-                        # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
+                        # 名前とカナ名は「CSVの値を優先」しつつ、JBAと違う場合は変更フラグだけ立てる
                         if 'name' in jba_data and jba_data['name']:
                             jba_name = str(jba_data['name']).strip()
-                            # 全角スペースを半角スペースに統一
                             jba_name = unicodedata.normalize('NFKC', jba_name)
                             csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
-                            # 編集ページから取得した選手名かチェック（優先して上書きしない）
+                            # 編集ページから取得した選手名かチェック（CSV優先は同じ）
                             is_edited_from_html = False
                             if univ and csv_name:
                                 is_edited_from_html = self.edited_player_names.get((univ, csv_name), False)
                             if jba_name != csv_name and not is_edited_from_html:
-                                corrected_data['選手名'] = jba_name
-                                if '氏名' in corrected_data:
-                                    corrected_data['氏名'] = jba_name
+                                # 値は上書きせず、差分があることだけ記録
                                 changed_fields.add('選手名')
                         
                         if 'kana_name' in jba_data and jba_data['kana_name']:
                             jba_kana = str(jba_data['kana_name']).strip()
-                            # 全角スペースを半角スペースに統一
                             jba_kana = unicodedata.normalize('NFKC', jba_kana)
                             csv_kana = str(corrected_data.get('カナ名', '')).strip()
                             if jba_kana != csv_kana:
-                                corrected_data['カナ名'] = jba_kana
                                 changed_fields.add('カナ名')
                         
                         # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
@@ -1222,29 +1247,22 @@ class IntegratedTournamentSystem:
                         corrected_data['学年'] = jba_grade
                         changed_fields.add('学年')
                 
-                # 名前とカナ名はJBAのデータで上書き（JBAが正しい）
+                # 名前とカナ名は「CSVの値を優先」しつつ、JBAと違う場合は変更フラグだけ立てる
                 if 'name' in jba_data and jba_data['name']:
                     jba_name = str(jba_data['name']).strip()
-                    # 全角スペースを半角スペースに統一
                     jba_name = unicodedata.normalize('NFKC', jba_name)
                     csv_name = str(corrected_data.get('選手名', corrected_data.get('氏名', ''))).strip()
-                    # 編集ページから取得した選手名かチェック（優先して上書きしない）
                     is_edited_from_html = False
                     if univ and csv_name:
                         is_edited_from_html = self.edited_player_names.get((univ, csv_name), False)
                     if jba_name != csv_name and not is_edited_from_html:
-                        corrected_data['選手名'] = jba_name
-                        if '氏名' in corrected_data:
-                            corrected_data['氏名'] = jba_name
                         changed_fields.add('選手名')
                 
                 if 'kana_name' in jba_data and jba_data['kana_name']:
                     jba_kana = str(jba_data['kana_name']).strip()
-                    # 全角スペースを半角スペースに統一
                     jba_kana = unicodedata.normalize('NFKC', jba_kana)
                     csv_kana = str(corrected_data.get('カナ名', '')).strip()
                     if jba_kana != csv_kana:
-                        corrected_data['カナ名'] = jba_kana
                         changed_fields.add('カナ名')
                 
                 # ポジション・出身校・背番号はCSVのデータをそのまま使用（変更しない）
@@ -1682,6 +1700,10 @@ class IntegratedTournamentSystem:
                     weight = clean_value(weight)
                     position = clean_value(d.get("ポジション", ""))
                     school = clean_value(d.get("出身校", ""))
+
+                    # 氏名・カナは表示用に正規化（スペース統一 + 記号削除）
+                    player_name = self._normalize_name_text(player_name)
+                    kana_name = self._normalize_name_text(kana_name)
                     
                     # 身長・体重・学年の小数点以下を切り捨て（数字のみ表示）
                     def truncate_decimal(value):
@@ -1766,26 +1788,48 @@ class IntegratedTournamentSystem:
                             if value.isdigit() or ('.' in value and value.replace('.', '').isdigit() and value.count('.') == 1):
                                 csv_player_no = value
                                 break
+
+                    # 背番号が「純粋な数字」でない場合はスタッフ扱いとして
+                    # 身長・体重・学年・出身校・学部・ポジションを空欄にする
+                    is_staff = csv_player_no is None
+                    if is_staff:
+                        height = ""
+                        weight = ""
+                        grade = ""
+                        department = ""
+                        school = ""
+                        position = ""
                     
                     # JBA照合でmatchした場合の処理
                     if status == "match":
                         # 構成員区分を考慮して登録状態を確認
                         is_valid_registration = False
                         
+                        # 氏名一致フラグ（スタッフ用の厳格判定に使用）
+                        name_equal = False
+                        if jba_data and "name" in jba_data and jba_data["name"]:
+                            jba_name_raw = str(jba_data["name"]).strip()
+                            csv_name_raw = str(d.get("選手名", d.get("氏名", ""))).strip()
+                            csv_name_norm = self._normalize_name_text(csv_name_raw)
+                            jba_name_norm = self._normalize_name_text(jba_name_raw)
+                            name_equal = (csv_name_norm == jba_name_norm)
+
                         if csv_player_no:
                             # 選手の場合：構成員区分が「競技者」の登録状態を確認
                             if jba_member_category and "競技者" in jba_member_category:
                                 if jba_registration_status and jba_registration_status.strip() == "登録完了":
                                     is_valid_registration = True
                         else:
-                            # スタッフの場合：構成員区分が「競技者」以外の登録状態を確認（競技者は絶対見ない）
-                            if jba_member_category and "競技者" not in jba_member_category:
-                                if jba_registration_status and jba_registration_status.strip() == "登録完了":
-                                    is_valid_registration = True
-                            # 構成員区分が取得できない場合も確認（競技者でない可能性がある）
-                            elif not jba_member_category:
-                                if jba_registration_status and jba_registration_status.strip() == "登録完了":
-                                    is_valid_registration = True
+                            # スタッフの場合：氏名が完全一致している + これまでの登録状態ロジック
+                            if name_equal:
+                                # 構成員区分が「競技者」以外の登録状態を確認（競技者は絶対見ない）
+                                if jba_member_category and "競技者" not in jba_member_category:
+                                    if jba_registration_status and jba_registration_status.strip() == "登録完了":
+                                        is_valid_registration = True
+                                # 構成員区分が取得できない場合も確認（競技者でない可能性がある）
+                                elif not jba_member_category:
+                                    if jba_registration_status and jba_registration_status.strip() == "登録完了":
+                                        is_valid_registration = True
                         
                         # 登録状態が有効な場合のみ〇
                         if is_valid_registration:
@@ -1818,13 +1862,18 @@ class IntegratedTournamentSystem:
                         # 元の選手名を取得（変更点記録用）
                         original_player_name = d.get("選手名", d.get("氏名", ""))
                         
-                        # 選手名が変更された場合のみ赤字で表示
+                        # 選手名が変更された場合のみ赤字で表示（テーブル上はCSV値を優先し、全文字赤字）
                         if '選手名' in changed_fields:
-                            corrected_name = corrected_data.get("選手名", player_name)
-                            player_name = f'<font color="red">{corrected_name}</font>'
-                            # 変更点を記録
+                            player_name = f'<font color="red">{player_name}</font>'
+                            # 変更点を記録（まとめページ用に、CSV値とJBA値を保存）
                             original_name_clean = str(original_player_name) if original_player_name else ""
-                            corrected_name_clean = re.sub(r'<[^>]+>', '', corrected_name)
+                            # JBA側の値（氏名）
+                            verification_result = r.get("verification_result", {})
+                            jba_name_raw = ""
+                            jba_data_local = verification_result.get("jba_data") if verification_result else None
+                            if jba_data_local and jba_data_local.get("name"):
+                                jba_name_raw = str(jba_data_local["name"]).strip()
+                            corrected_name_clean = jba_name_raw
                             source = "編" if is_edited_from_html else "JBA"
                             all_changes.append({
                                 'univ': univ_name,
@@ -1835,13 +1884,17 @@ class IntegratedTournamentSystem:
                                 'source': source
                             })
                         
-                        # カナ名が変更された場合のみ赤字で表示
+                        # カナ名が変更された場合のみ赤字で表示（テーブル上はCSV値を優先し、全文字赤字）
                         if 'カナ名' in changed_fields:
-                            corrected_kana = corrected_data.get("カナ名", kana_name)
-                            kana_name = f'<font color="red">{corrected_kana}</font>'
-                            # 変更点を記録
+                            kana_name = f'<font color="red">{kana_name}</font>'
+                            # 変更点を記録（まとめページ用に、CSV値とJBA値を保存）
                             original_kana_clean = str(d.get("カナ名", "")) if d.get("カナ名") else ""
-                            corrected_kana_clean = re.sub(r'<[^>]+>', '', corrected_kana)
+                            verification_result = r.get("verification_result", {})
+                            jba_kana_raw = ""
+                            jba_data_local = verification_result.get("jba_data") if verification_result else None
+                            if jba_data_local and jba_data_local.get("kana_name"):
+                                jba_kana_raw = str(jba_data_local["kana_name"]).strip()
+                            corrected_kana_clean = jba_kana_raw
                             source = "編" if is_edited_from_html else "JBA"
                             all_changes.append({
                                 'univ': univ_name,
@@ -1947,13 +2000,16 @@ class IntegratedTournamentSystem:
                     # 英語名の場合は文字数を倍にする
                     player_name_max = 40 if is_english_name(player_name) else 20
                     kana_name_max = 40 if is_english_name(kana_name) else 20
-                    department_max = 30 if is_english_name(department) else 15
+                    # 枠を広げたので学部の最大文字数も増やす（おおよそ比率に合わせて）
+                    # 日本語: 15 → 26文字程度 / 英語: 30 → 50文字程度
+                    department_max = 50 if is_english_name(department) else 26
                     school_max = 50 if is_english_name(school) else 25
                     position_max = 12 if is_english_name(position) else 6
                     
                     # 数値系はタグを壊さないようにトリムせずにそのまま出力
                     row_data = [
-                        self._truncate_text(no, 10),  # No（10文字まで表示）
+                        # No は枠を広げたので最大文字数も増やす（10 → 22文字程度）
+                        self._truncate_text(no, 22),  # No（22文字まで表示）
                         self._truncate_text(player_name, player_name_max),  # 選手名（英語の場合は倍）
                         self._truncate_text(kana_name, kana_name_max),  # カナ名（英語の場合は倍）
                         self._truncate_text(department, department_max),  # 学部（英語の場合は倍）
@@ -2088,9 +2144,18 @@ class IntegratedTournamentSystem:
                 # 出身校: 英語50文字、日本語30文字が入るように調整（選手名・カナ名を広げるため縮小）
                 # 6ptの時: 英語1文字 ≈ 1.25mm → 50文字 × 1.25mm = 62.5mm
                 # 6ptの時: 日本語1文字 ≈ 2.5mm → 30文字 × 2.5mm = 75mm
-                # 両方が同時に入る可能性を考慮: 62.5mm + 75mm = 137.5mm + 余裕-17.5mm = 約120mm（選手名・カナ名を広げるため20mm縮小）
+                # 両方が同時に入る可能性を考慮: 62.5mm + 75mm = 137.5mm + 余裕-17.5mm = 約120mm
+                # 要望1: 出身校の枠を8文字分狭めて、その分を No と学部に4文字ずつ割り当てる（文字数上限はそのまま）
+                # 日本語1文字 ≈ 2.5mm として、8文字 ≒ 20mm を再配分:
+                #   No 列: +4文字 ≒ +10mm  → 16mm → 26mm
+                #   学部列: +4文字 ≒ +10mm → 26mm → 36mm
+                #   出身校列: -8文字 ≒ -20mm → 120mm → 100mm
+                # 要望2: さらに20mm（8文字分）移動して、No と学部に10mmずつ追加:
+                #   No 列: +4文字 ≒ +10mm  → 26mm → 36mm
+                #   学部列: +4文字 ≒ +10mm → 36mm → 46mm
+                #   出身校列: -8文字 ≒ -20mm → 100mm → 80mm
                 # [No, 選手名, カナ名, 学部, 学年, 身長, 体重, ポジション, 出身校, JBA]
-                base_col_widths = [16*mm, 60*mm, 60*mm, 26*mm, 8*mm, 8*mm, 8*mm, 5*mm, 120*mm, 5*mm]
+                base_col_widths = [36*mm, 60*mm, 60*mm, 46*mm, 8*mm, 8*mm, 8*mm, 5*mm, 80*mm, 5*mm]
                 # フォントサイズに応じて列幅を拡大（細かい文字の時と同じ文字数が入るように）
                 col_widths = [w * width_multiplier for w in base_col_widths]
                 

@@ -2,7 +2,8 @@ app = "letada-rgwgow"
 primary_region = "nrt"
 
 [build]
-  dockerfile = "ddadam/backend/Dockerfile"
+  # ローカルでこのフォルダ（ddadam）からデプロイするので、Dockerfile は直下の backend 配下を指す
+  dockerfile = "backend/Dockerfile"
   build_args = []
 
 [env]
@@ -25,18 +26,14 @@ primary_region = "nrt"
     method = "GET"
     path = "/health"
 
+#
 # Worker Service（バックグラウンドジョブ処理）
+# Flyでは単純にコマンドだけ定義しておけばOK
 [processes]
   web = "uvicorn main:app --host 0.0.0.0 --port 8000"
   worker = "python -m worker.worker_runner"
 
-# Worker プロセスの設定
-[processes.worker]
-  auto_start_machines = true
-  auto_stop_machines = false
-  min_machines_running = 0
-
-# VM設定
+# VM設定（共通）
 [[vm]]
   cpu_kind = "shared"
   cpus = 1
