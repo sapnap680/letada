@@ -27,8 +27,8 @@ primary_region = "nrt"
 
 # Worker Service（バックグラウンドジョブ処理）
 [processes]
-  web = "cd /app && uvicorn main:app --host 0.0.0.0 --port 8000"
-  worker = "cd /app && python -m worker.worker_runner"
+  web = "uvicorn main:app --host 0.0.0.0 --port 8000"
+  worker = "python -m worker.worker_runner"
 
 # Worker プロセスの設定
 [processes.worker]
