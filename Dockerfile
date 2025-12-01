@@ -1,43 +1,32 @@
-app = "letada-rgwgow"
-primary_region = "nrt"
+# Backend Dockerfile
+FROM python:3.11-slim
 
-[build]
-  dockerfile = "ddadam/backend/Dockerfile"
-  build_args = []
+# 作業ディレクトリ
+WORKDIR /app
 
-[env]
-  PORT = "8000"
-  PYTHONUNBUFFERED = "1"
+# システムパッケージの更新と日本語フォントのインストール
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-noto-cjk \
+    fonts-dejavu-core \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
 
-# Web Service（FastAPI）
-[http_service]
-  auto_start_machines = true
-  auto_stop_machines = false
-  force_https = true
-  internal_port = 8000
-  min_machines_running = 0
-  processes = ["web"]
+# 依存ライブラリをコピーしてインストール
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-  [[http_service.checks]]
-    interval = "10s"
-    timeout = "2s"
-    grace_period = "5s"
-    method = "GET"
-    path = "/health"
+# アプリケーションコードをコピー
+COPY backend/ .
 
-# Worker Service（バックグラウンドジョブ処理）
-[processes]
-  web = "uvicorn main:app --host 0.0.0.0 --port 8000"
-  worker = "python -m worker.worker_runner"
+# 必要なディレクトリを作成
+RUN mkdir -p outputs temp_results worker
 
-# Worker プロセスの設定
-[processes.worker]
-  auto_start_machines = true
-  auto_stop_machines = false
-  min_machines_running = 0
+# ポート公開（Fly.io用）
+ENV PORT=8000
+EXPOSE $PORT
 
-# VM設定
-[[vm]]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 1024
+# アプリケーション起動
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${PORT:-8000}"]
+
+
