@@ -1,13 +1,43 @@
-FROM python:3.11-slim
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    fonts-noto-cjk fonts-dejavu-core fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
-COPY ddadam/backend/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-COPY ddadam/backend/ .
-RUN mkdir -p outputs temp_results worker
-ENV PORT=8000
-EXPOSE $PORT
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${PORT:-8000}"]
+app = "letada-rgwgow"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "ddadam/backend/Dockerfile"
+  build_args = []
+
+[env]
+  PORT = "8000"
+  PYTHONUNBUFFERED = "1"
+
+# Web Service（FastAPI）
+[http_service]
+  auto_start_machines = true
+  auto_stop_machines = false
+  force_https = true
+  internal_port = 8000
+  min_machines_running = 0
+  processes = ["web"]
+
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/health"
+
+# Worker Service（バックグラウンドジョブ処理）
+[processes]
+  web = "uvicorn main:app --host 0.0.0.0 --port 8000"
+  worker = "python -m worker.worker_runner"
+
+# Worker プロセスの設定
+[processes.worker]
+  auto_start_machines = true
+  auto_stop_machines = false
+  min_machines_running = 0
+
+# VM設定
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024
